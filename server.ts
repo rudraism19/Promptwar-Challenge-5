@@ -13,7 +13,8 @@ const isProd = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+// Keep API payloads small: event inputs are structured text, not file uploads.
+app.use(express.json({ limit: '256kb' }));
 
 const apiKey = process.env.GEMINI_API_KEY;
 const ai = apiKey
@@ -42,45 +43,20 @@ app.post('/api/ai/generate-event', async (req, res) => {
     } = req.body;
 
     if (!ai) {
-      // Fallback deterministic high-grade event generator
       const fallbackPlan = generateFallbackPlan({
-        eventType,
-        title,
-        date,
-        location,
-        guestCount,
-        targetBudget,
-        vibe,
-        specialRequests,
+        eventType, title, date, location, guestCount, targetBudget, vibe, specialRequests,
       });
       return res.json({ success: true, plan: fallbackPlan, source: 'fallback' });
     }
 
-    const systemPrompt = `You are PlanCraft AI, the world's most creative and organized event planning director specializing in weddings, milestone birthdays, and community festivals.
-Create an exhaustive, professional, and personalized event plan formatted STRICTLY as JSON.
-The plan must distribute the total target budget ($${targetBudget}) intelligently across realistic categories.
-Include:
-1. "title": catchy, inspiring title
-2. "vibeAndTheme": vivid 1-2 sentence aesthetic concept
-3. "colorPalette": array of 4-5 items with {"name": string, "hex": "#rrggbb"}
-4. "summaryStory": narrative describing how guests will feel from arrival to farewell (2-3 sentences)
-5. "keyHighlights": array of 4 distinct signature experiences or focal points
-6. "budgetItems": array of 7-10 realistic line items. Each has:
-   {"id": string, "category": string, "name": string, "plannedCost": number, "actualCost": number, "paid": boolean, "notes": string}
-   Sum of plannedCost must roughly match ${targetBudget}. Set 2-3 items as paid: true with actualCost close to planned.
-7. "timelineItems": array of 9-14 items spanning:
-   - "12+ Months" or "6-9 Months" (milestone)
-   - "3-5 Months" (milestone)
-   - "1-2 Months" (milestone)
-   - "Final Weeks" (milestone)
-   - "Day-of Schedule" (at least 5 sequential items with "timeOfDay", e.g., "10:00 AM - 12:00 PM", and "dayOfOrder": number 1..n)
-   Each item has: {"id": string, "title": string, "description": string, "phase": string, "dueDate": string (YYYY-MM-DD), "timeOfDay"?: string, "completed": boolean, "priority": "high"|"medium"|"low", "assignedTo"?: string, "dayOfOrder"?: number}
-8. "vendorItems": array of 4-6 vendor recommendations with:
-   {"id": string, "category": string, "name": string, "roleDescription": string, "estimatedCost": number, "status": "researching"|"contacted"|"booked", "questionsToAsk": [string, string]}
-9. "personalizedIdeas": array of 4-5 bespoke ideas across categories ("food_drink", "theme_decor", "entertainment_activity", "budget_saver", "contingency_backup"):
-   {"id": string, "title": string, "category": string, "description": string, "whyItFitsTheme": string, "estimatedCostImpact": string, "addedToPlan": boolean}
-
-Return ONLY valid JSON matching these specifications without markdown fences.`;
+    const systemPrompt = `You are PlanCraft AI, an organized event planning director specializing in weddings, birthdays, and community festivals.
+Create a personalized event plan as STRICT JSON. The total target budget is $${targetBudget}.
+Include title, vibeAndTheme, colorPalette (4-5 {name,hex} items), summaryStory, keyHighlights (4),
+budgetItems (7-10 items with id, category, name, plannedCost, actualCost, paid, notes; planned costs should total about the budget),
+timelineItems (9-14 milestones and at least 5 sequential day-of items),
+vendorItems (4-6 vendor recommendations with questionsToAsk),
+and personalizedIdeas (4-5 ideas across food_drink, theme_decor, entertainment_activity, budget_saver, contingency_backup).
+Return ONLY valid JSON without markdown fences.`;
 
     const userPrompt = `Event Request:
 - Type: ${eventType}
@@ -97,33 +73,22 @@ Generate the complete JSON event plan.`;
     const aiCall = ai.models.generateContent({
       model: 'gemini-3.8-flash',
       contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-        temperature: 0.7,
-      },
+      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json', temperature: 0.7 },
     });
-
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('AI event generation timed out')), 12000)
     );
-
     const response: any = await Promise.race([aiCall, timeoutPromise]);
-
     const text = response.text || '';
     let parsed: any;
     try {
       parsed = JSON.parse(text);
     } catch {
       const match = text.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
-      } else {
-        throw new Error('Failed to parse model JSON output');
-      }
+      if (match) parsed = JSON.parse(match[0]);
+      else throw new Error('Failed to parse model JSON output');
     }
 
-    // Attach metadata
     parsed.id = `event-${Date.now()}`;
     parsed.eventType = eventType;
     parsed.targetBudget = Number(targetBudget);
@@ -132,72 +97,45 @@ Generate the complete JSON event plan.`;
     parsed.location = location;
     parsed.createdAt = new Date().toISOString();
     parsed.updatedAt = new Date().toISOString();
-
     return res.json({ success: true, plan: parsed, source: 'gemini' });
   } catch (error: any) {
-    console.error('Gemini generate event error, utilizing high-quality fallback:', error);
-    const fallbackPlan = generateFallbackPlan(req.body);
-    return res.json({ success: true, plan: fallbackPlan, source: 'fallback', note: error?.message });
+    console.error('Gemini generate event error, utilizing fallback:', error);
+    return res.json({ success: true, plan: generateFallbackPlan(req.body || {}), source: 'fallback', note: error?.message });
   }
 });
 
-// Endpoint: AI Brainstorming for ideas
+// Endpoint: AI brainstorming for ideas
 app.post('/api/ai/brainstorm-ideas', async (req, res) => {
   try {
     const { eventTitle, eventType, vibe, guestCount, budget, prompt, category } = req.body;
-
     if (!ai) {
-      const fallbackIdeas = generateFallbackIdeas(eventType, prompt);
-      return res.json({ success: true, ideas: fallbackIdeas });
+      return res.json({ success: true, ideas: generateFallbackIdeas(eventType, prompt) });
     }
-
-    const systemPrompt = `You are a visionary event experience designer.
-Generate 3 to 4 innovative, practical, and unforgettable personalized event ideas formatted as a JSON array.
-Each idea must have:
-- "id": string
-- "title": string
-- "category": "theme_decor" | "food_drink" | "entertainment_activity" | "budget_saver" | "contingency_backup"
-- "description": string (specific actionable idea)
-- "whyItFitsTheme": string (why it shines for this event vibe)
-- "estimatedCostImpact": string (e.g., "+$150" or "Saves ~$300")
-- "addedToPlan": false
-
-Respond ONLY with a JSON array.`;
-
+    const systemPrompt = `You are a visionary event experience designer. Generate 3 to 4 innovative, practical event ideas as a JSON array.
+Each idea must include id, title, category (theme_decor|food_drink|entertainment_activity|budget_saver|contingency_backup), description, whyItFitsTheme, estimatedCostImpact, addedToPlan=false. Return ONLY JSON.`;
     const userPrompt = `Event: "${eventTitle}" (${eventType}), Vibe: "${vibe}", Guests: ${guestCount}, Budget: $${budget}.
 User Request: ${prompt}
 Focus Category: ${category || 'any'}`;
-
     const aiCall = ai.models.generateContent({
       model: 'gemini-3.8-flash',
       contents: userPrompt,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-      },
+      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
     });
-
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Brainstorm timed out')), 6000)
     );
-
     const response: any = await Promise.race([aiCall, timeoutPromise]);
-    const parsed = JSON.parse(response.text || '[]');
-    return res.json({ success: true, ideas: parsed });
+    return res.json({ success: true, ideas: JSON.parse(response.text || '[]') });
   } catch (err: any) {
     console.error('AI brainstorm error:', err);
-    return res.json({
-      success: true,
-      ideas: generateFallbackIdeas(req.body.eventType, req.body.prompt),
-    });
+    return res.json({ success: true, ideas: generateFallbackIdeas(req.body?.eventType, req.body?.prompt) });
   }
 });
 
-// Endpoint: AI Vendor Interview Questions & Advice
+// Endpoint: AI vendor interview questions and advice
 app.post('/api/ai/vendor-advice', async (req, res) => {
   try {
     const { vendorCategory, eventType, targetBudget, specialRequirements } = req.body;
-
     if (!ai) {
       return res.json({
         success: true,
@@ -212,29 +150,18 @@ app.post('/api/ai/vendor-advice', async (req, res) => {
         },
       });
     }
-
     const systemPrompt = `You are a seasoned event production manager. Provide sharp vendor vetting advice for a ${vendorCategory} for a ${eventType} (Budget: $${targetBudget}).
-Return JSON with:
-- "questions": array of 4 insightful questions to ask
-- "redFlags": array of 2-3 warning signs to watch for
-- "negotiationTip": 1 high-leverage negotiation tip`;
-
+Return JSON with questions (array of 4), redFlags (array of 2-3), and negotiationTip (string).`;
     const aiCall = ai.models.generateContent({
       model: 'gemini-3.8-flash',
       contents: `Category: ${vendorCategory}. Special considerations: ${specialRequirements || 'None'}`,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: 'application/json',
-      },
+      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
     });
-
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('AI generation timed out')), 6000)
     );
-
     const response: any = await Promise.race([aiCall, timeoutPromise]);
-    const parsed = JSON.parse(response.text || '{}');
-    return res.json({ success: true, advice: parsed });
+    return res.json({ success: true, advice: JSON.parse(response.text || '{}') });
   } catch (err) {
     console.warn('Vendor advice using fallback:', err);
     return res.json({
@@ -322,55 +249,13 @@ function generateFallbackPlan(params: any) {
       { id: 't9', title: '08:00 PM - Celebration Party, Dancing & Dessert', description: 'Tempo picks up; dessert station opens.', phase: 'Day-of Schedule', timeOfDay: '08:00 PM - 10:30 PM', completed: false, priority: 'medium', dayOfOrder: 5 },
     ],
     vendorItems: [
-      {
-        id: 'v1',
-        category: 'Venue',
-        name: 'The Pavilion & Courtyard',
-        roleDescription: 'Private indoor/outdoor event space with historic brick walls and courtyard.',
-        estimatedCost: Math.round(targetBudget * 0.32),
-        actualCost: Math.round(targetBudget * 0.32),
-        status: 'booked',
-        questionsToAsk: ['Are outside caterers permitted?', 'What is the exact curfew?'],
-      },
-      {
-        id: 'v2',
-        category: 'Catering',
-        name: 'Artisan Feast Culinary Group',
-        roleDescription: 'Full-service catering with bartender, passed appetizers, and dinner.',
-        estimatedCost: Math.round(targetBudget * 0.35),
-        status: 'contacted',
-        questionsToAsk: ['Do you handle plate rentals?', 'What is your staffing ratio?'],
-      },
-      {
-        id: 'v3',
-        category: 'Photography',
-        name: 'Vivid Memory Studios',
-        roleDescription: 'Full coverage candid photojournalism with drone aerials.',
-        estimatedCost: Math.round(targetBudget * 0.12),
-        actualCost: Math.round(targetBudget * 0.12),
-        status: 'booked',
-        questionsToAsk: ['When is the sneak-peek gallery available?'],
-      },
+      { id: 'v1', category: 'Venue', name: 'The Pavilion & Courtyard', roleDescription: 'Private indoor/outdoor event space with historic brick walls and courtyard.', estimatedCost: Math.round(targetBudget * 0.32), actualCost: Math.round(targetBudget * 0.32), status: 'booked', questionsToAsk: ['Are outside caterers permitted?', 'What is the exact curfew?'] },
+      { id: 'v2', category: 'Catering', name: 'Artisan Feast Culinary Group', roleDescription: 'Full-service catering with bartender, passed appetizers, and dinner.', estimatedCost: Math.round(targetBudget * 0.35), status: 'contacted', questionsToAsk: ['Do you handle plate rentals?', 'What is your staffing ratio?'] },
+      { id: 'v3', category: 'Photography', name: 'Vivid Memory Studios', roleDescription: 'Full coverage candid photojournalism with drone aerials.', estimatedCost: Math.round(targetBudget * 0.12), actualCost: Math.round(targetBudget * 0.12), status: 'booked', questionsToAsk: ['When is the sneak-peek gallery available?'] },
     ],
     personalizedIdeas: [
-      {
-        id: 'i1',
-        title: 'Custom Mocktail & Cocktail Tap Station',
-        category: 'food_drink',
-        description: 'Self-serve barrel taps with infused rosemary citrus soda and spiked peach spritz.',
-        whyItFitsTheme: 'Prevents bar bottlenecks and creates an interactive visual centerpiece.',
-        estimatedCostImpact: '+$180 for barrel dispensers & herbal sprigs',
-        addedToPlan: false,
-      },
-      {
-        id: 'i2',
-        title: 'Illuminated Memory Archway Entrance',
-        category: 'theme_decor',
-        description: 'Twinkling fairylights woven through botanical eucalyptus garlands over the entry door.',
-        whyItFitsTheme: 'Immerses guests into the celebration atmosphere the second they walk through the door.',
-        estimatedCostImpact: '~$95 DIY materials',
-        addedToPlan: false,
-      },
+      { id: 'i1', title: 'Custom Mocktail & Cocktail Tap Station', category: 'food_drink', description: 'Self-serve barrel taps with infused rosemary citrus soda and spiked peach spritz.', whyItFitsTheme: 'Prevents bar bottlenecks and creates an interactive visual centerpiece.', estimatedCostImpact: '+$180 for barrel dispensers & herbal sprigs', addedToPlan: false },
+      { id: 'i2', title: 'Illuminated Memory Archway Entrance', category: 'theme_decor', description: 'Twinkling fairylights woven through botanical eucalyptus garlands over the entry door.', whyItFitsTheme: 'Immerses guests into the celebration atmosphere the second they walk through the door.', estimatedCostImpact: '~$95 DIY materials', addedToPlan: false },
     ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

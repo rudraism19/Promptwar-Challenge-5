@@ -20,11 +20,16 @@ export interface BudgetTotals {
   categories: CategorySummary[];
 }
 
+function finiteNonNegative(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export function calculateBudgetTotals(
   budgetItems: BudgetItem[] = [],
   targetBudget: number = 0
 ): BudgetTotals {
-  const safeTarget = Math.max(0, targetBudget);
+  const safeTarget = finiteNonNegative(targetBudget);
   let totalPlanned = 0;
   let totalSpent = 0;
   let totalPaid = 0;
@@ -32,15 +37,13 @@ export function calculateBudgetTotals(
   const categoryMap = new Map<string, { planned: number; actual: number; count: number }>();
 
   for (const item of budgetItems) {
-    const planned = Number(item.plannedCost) || 0;
-    const actual = Number(item.actualCost) || 0;
+    const planned = finiteNonNegative(item.plannedCost);
+    const actual = finiteNonNegative(item.actualCost);
     totalPlanned += planned;
     totalSpent += actual;
-    if (item.paid) {
-      totalPaid += actual;
-    }
+    if (item.paid) totalPaid += actual;
 
-    const catName = item.category?.trim() || 'General';
+    const catName = typeof item.category === 'string' ? item.category.trim() || 'General' : 'General';
     const existing = categoryMap.get(catName) || { planned: 0, actual: 0, count: 0 };
     existing.planned += planned;
     existing.actual += actual;
@@ -98,31 +101,17 @@ export function calculateTimelineProgress(
       completed++;
     } else if (item.dueDate) {
       const dueTime = new Date(item.dueDate).getTime();
-      if (!isNaN(dueTime) && dueTime < refTime) {
-        overdueCount++;
-      }
+      if (!isNaN(dueTime) && dueTime < refTime) overdueCount++;
     }
 
     const phase = item.phase || 'Unscheduled';
-    if (!phaseCounts[phase]) {
-      phaseCounts[phase] = { total: 0, completed: 0 };
-    }
+    if (!phaseCounts[phase]) phaseCounts[phase] = { total: 0, completed: 0 };
     phaseCounts[phase].total++;
-    if (item.completed) {
-      phaseCounts[phase].completed++;
-    }
+    if (item.completed) phaseCounts[phase].completed++;
   }
 
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-  return {
-    total,
-    completed,
-    pending: total - completed,
-    percent,
-    overdueCount,
-    phaseCounts,
-  };
+  return { total, completed, pending: total - completed, percent, overdueCount, phaseCounts };
 }
 
 export interface VendorProgress {
@@ -146,7 +135,7 @@ export function calculateVendorProgress(vendorItems: VendorItem[] = []): VendorP
   for (const item of vendorItems) {
     if (item.status === 'booked') {
       booked++;
-      totalCommittedCost += Number(item.actualCost ?? item.estimatedCost ?? 0);
+      totalCommittedCost += finiteNonNegative(item.actualCost ?? item.estimatedCost ?? 0);
     } else if (item.status === 'contacted') {
       contacted++;
     } else if (item.status === 'researching') {
@@ -157,16 +146,7 @@ export function calculateVendorProgress(vendorItems: VendorItem[] = []): VendorP
   }
 
   const percentBooked = total > 0 ? Math.round((booked / total) * 100) : 0;
-
-  return {
-    total,
-    booked,
-    contacted,
-    researching,
-    declined,
-    percentBooked,
-    totalCommittedCost: Math.round(totalCommittedCost),
-  };
+  return { total, booked, contacted, researching, declined, percentBooked, totalCommittedCost: Math.round(totalCommittedCost) };
 }
 
 export function filterTimelineItems(
@@ -179,15 +159,9 @@ export function filterTimelineItems(
   }
 ): TimelineItem[] {
   return items.filter((item) => {
-    if (filter.phase && filter.phase !== 'ALL' && item.phase !== filter.phase) {
-      return false;
-    }
-    if (filter.priority && filter.priority !== 'ALL' && item.priority !== filter.priority) {
-      return false;
-    }
-    if (filter.hideCompleted && item.completed) {
-      return false;
-    }
+    if (filter.phase && filter.phase !== 'ALL' && item.phase !== filter.phase) return false;
+    if (filter.priority && filter.priority !== 'ALL' && item.priority !== filter.priority) return false;
+    if (filter.hideCompleted && item.completed) return false;
     if (filter.searchQuery && filter.searchQuery.trim()) {
       const q = filter.searchQuery.toLowerCase().trim();
       const matchTitle = item.title.toLowerCase().includes(q);
