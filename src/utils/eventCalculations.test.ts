@@ -16,17 +16,13 @@ test('calculateBudgetTotals computes planned, spent, and categories accurately',
     { id: '3', category: 'Catering', name: 'Buffet Dinner', plannedCost: 3000, actualCost: 2800, paid: false },
     { id: '4', category: 'Decor', name: 'Florals', plannedCost: 800, actualCost: 0, paid: false },
   ];
-
   const result = calculateBudgetTotals(items, 6500);
-
   assert.equal(result.totalPlanned, 6300);
   assert.equal(result.totalSpent, 5400);
   assert.equal(result.totalPaid, 2600);
   assert.equal(result.remainingTarget, 1100);
   assert.equal(result.isOverBudget, false);
   assert.equal(result.variancePlannedVsTarget, 200);
-
-  // Check categories grouped and sorted
   assert.equal(result.categories.length, 3);
   assert.equal(result.categories[0].category, 'Catering');
   assert.equal(result.categories[0].planned, 3000);
@@ -43,78 +39,57 @@ test('calculateBudgetTotals flags over budget correctly', () => {
   assert.equal(result.remainingTarget, -300);
 });
 
+test('calculateBudgetTotals handles empty items, zero targets and invalid costs safely', () => {
+  const empty = calculateBudgetTotals([], 0);
+  assert.equal(empty.totalPlanned, 0);
+  assert.equal(empty.totalSpent, 0);
+  assert.equal(empty.percentSpent, 0);
+  assert.equal(empty.isOverBudget, false);
+
+  const items = [
+    { id: '1', category: '  ', name: 'Misc', plannedCost: Number.NaN, actualCost: Number.POSITIVE_INFINITY, paid: false },
+  ] as BudgetItem[];
+  const result = calculateBudgetTotals(items, -50);
+  assert.equal(result.targetBudget, 0);
+  assert.equal(result.totalPlanned, 0);
+  assert.equal(result.totalSpent, 0);
+  assert.equal(result.categories[0].category, 'General');
+});
+
 test('calculateTimelineProgress calculates completion percentage and overdue counts', () => {
   const items: TimelineItem[] = [
-    {
-      id: 't1',
-      title: 'Book venue',
-      description: 'Confirm deposit',
-      phase: '6-9 Months',
-      dueDate: '2026-05-01',
-      completed: true,
-      priority: 'high',
-    },
-    {
-      id: 't2',
-      title: 'Tasting session',
-      description: 'Sample menu items',
-      phase: '3-5 Months',
-      dueDate: '2026-08-01',
-      completed: false,
-      priority: 'medium',
-    },
-    {
-      id: 't3',
-      title: 'Send invitations',
-      description: 'Digital and paper',
-      phase: '1-2 Months',
-      dueDate: '2026-10-01',
-      completed: false,
-      priority: 'high',
-    },
+    { id: 't1', title: 'Book venue', description: 'Confirm deposit', phase: '6-9 Months', dueDate: '2026-05-01', completed: true, priority: 'high' },
+    { id: 't2', title: 'Tasting session', description: 'Sample menu items', phase: '3-5 Months', dueDate: '2026-08-01', completed: false, priority: 'medium' },
+    { id: 't3', title: 'Send invitations', description: 'Digital and paper', phase: '1-2 Months', dueDate: '2026-10-01', completed: false, priority: 'high' },
   ];
-
-  // Using a test reference date where 2026-08-01 is overdue (e.g., 2026-09-01)
   const result = calculateTimelineProgress(items, '2026-09-01');
   assert.equal(result.total, 3);
   assert.equal(result.completed, 1);
   assert.equal(result.pending, 2);
   assert.equal(result.percent, 33);
-  assert.equal(result.overdueCount, 1); // t2 is overdue, t3 is not yet overdue
+  assert.equal(result.overdueCount, 1);
+});
+
+test('calculateTimelineProgress handles empty lists, invalid dates and completed overdue items', () => {
+  assert.deepEqual(calculateTimelineProgress([], '2026-01-01'), {
+    total: 0, completed: 0, pending: 0, percent: 0, overdueCount: 0, phaseCounts: {},
+  });
+  const items: TimelineItem[] = [
+    { id: 'a', title: 'Invalid date', description: '', phase: '', dueDate: 'not-a-date', completed: false, priority: 'low' },
+    { id: 'b', title: 'Done', description: '', phase: 'Final Weeks', dueDate: '2020-01-01', completed: true, priority: 'low' },
+  ];
+  const result = calculateTimelineProgress(items, '2026-01-01');
+  assert.equal(result.overdueCount, 0);
+  assert.equal(result.completed, 1);
+  assert.equal(result.phaseCounts.Unscheduled.total, 1);
 });
 
 test('calculateVendorProgress handles booked and pending vendor counts', () => {
   const vendors: VendorItem[] = [
-    {
-      id: 'v1',
-      category: 'Photography',
-      name: 'Lens & Light Studio',
-      roleDescription: 'Full day coverage',
-      estimatedCost: 1500,
-      actualCost: 1600,
-      status: 'booked',
-      questionsToAsk: ['Are raw files included?'],
-    },
-    {
-      id: 'v2',
-      category: 'DJ',
-      name: 'Soundwave Beats',
-      roleDescription: 'Reception audio',
-      estimatedCost: 800,
-      status: 'contacted',
-      questionsToAsk: ['Do you bring backup equipment?'],
-    },
-    {
-      id: 'v3',
-      category: 'Florist',
-      name: 'Petal Haven',
-      roleDescription: 'Centerpieces',
-      estimatedCost: 600,
-      status: 'researching',
-      questionsToAsk: [],
-    },
+    { id: 'v1', category: 'Photography', name: 'Lens & Light Studio', roleDescription: 'Full day coverage', estimatedCost: 1500, actualCost: 1600, status: 'booked', questionsToAsk: ['Are raw files included?'] },
+    { id: 'v2', category: 'DJ', name: 'Soundwave Beats', roleDescription: 'Reception audio', estimatedCost: 800, status: 'contacted', questionsToAsk: ['Do you bring backup equipment?'] },
+    { id: 'v3', category: 'Florist', name: 'Petal Haven', roleDescription: 'Centerpieces', estimatedCost: 600, status: 'researching', questionsToAsk: [] },
   ];
-
   const result = calculateVendorProgress(vendors);
   assert.equal(result.total, 3);
   assert.equal(result.booked, 1);
@@ -124,31 +99,42 @@ test('calculateVendorProgress handles booked and pending vendor counts', () => {
   assert.equal(result.totalCommittedCost, 1600);
 });
 
+test('calculateVendorProgress handles empty vendors and uses estimated booked cost', () => {
+  assert.equal(calculateVendorProgress([]).percentBooked, 0);
+  const items: VendorItem[] = [
+    { id: 'v1', category: 'Catering', name: 'Caterer', roleDescription: '', estimatedCost: 2500, status: 'booked', questionsToAsk: [] },
+    { id: 'v2', category: 'Venue', name: 'Venue', roleDescription: '', estimatedCost: 1000, status: 'declined', questionsToAsk: [] },
+  ];
+  const result = calculateVendorProgress(items);
+  assert.equal(result.booked, 1);
+  assert.equal(result.declined, 1);
+  assert.equal(result.totalCommittedCost, 2500);
+});
+
 test('filterTimelineItems correctly filters by phase and search query', () => {
   const items: TimelineItem[] = [
     { id: '1', title: 'Find DJ', description: 'Search local DJs', phase: '6-9 Months', completed: false, priority: 'medium' },
     { id: '2', title: 'Finalize Seating', description: 'Table chart', phase: 'Final Weeks', completed: true, priority: 'high' },
     { id: '3', title: 'Rehearsal Dinner', description: 'Reserve venue table', phase: 'Final Weeks', completed: false, priority: 'high' },
   ];
-
-  const phaseFiltered = filterTimelineItems(items, { phase: 'Final Weeks' });
-  assert.equal(phaseFiltered.length, 2);
-
+  assert.equal(filterTimelineItems(items, { phase: 'Final Weeks' }).length, 2);
   const searchFiltered = filterTimelineItems(items, { searchQuery: 'chart' });
   assert.equal(searchFiltered.length, 1);
   assert.equal(searchFiltered[0].id, '2');
+  assert.equal(filterTimelineItems(items, { phase: 'Final Weeks', hideCompleted: true }).length, 1);
+});
 
-  const hideCompletedFiltered = filterTimelineItems(items, { phase: 'Final Weeks', hideCompleted: true });
-  assert.equal(hideCompletedFiltered.length, 1);
-  assert.equal(hideCompletedFiltered[0].id, '3');
+test('filterTimelineItems supports priority, case-insensitive search and ALL filters', () => {
+  const items: TimelineItem[] = [
+    { id: '1', title: 'Book DJ', description: 'Call venue', phase: 'Final Weeks', completed: false, priority: 'high' },
+    { id: '2', title: 'Order Cake', description: 'Chocolate cake', phase: 'Day-of Schedule', completed: false, priority: 'low' },
+  ];
+  assert.equal(filterTimelineItems(items, { priority: 'high' }).length, 1);
+  assert.equal(filterTimelineItems(items, { phase: 'ALL', priority: 'ALL', searchQuery: 'CHOCOLATE' }).length, 1);
 });
 
 test('sanitizeEventPlan returns valid EventPlan defaults on missing fields', () => {
-  const plan = sanitizeEventPlan({
-    title: 'Spring Garden Party',
-    eventType: 'birthday',
-  });
-
+  const plan = sanitizeEventPlan({ title: 'Spring Garden Party', eventType: 'birthday' });
   assert.equal(plan.title, 'Spring Garden Party');
   assert.equal(plan.eventType, 'birthday');
   assert.ok(plan.targetBudget > 0);
@@ -158,4 +144,21 @@ test('sanitizeEventPlan returns valid EventPlan defaults on missing fields', () 
   assert.ok(Array.isArray(plan.budgetItems));
   assert.ok(Array.isArray(plan.timelineItems));
   assert.ok(Array.isArray(plan.vendorItems));
+});
+
+test('sanitizeEventPlan trims text and tolerates malformed collections', () => {
+  const plan = sanitizeEventPlan({
+    title: '  Launch Party  ',
+    location: '  Main Hall  ',
+    keyHighlights: null as unknown as string[],
+    budgetItems: null as unknown as BudgetItem[],
+    timelineItems: 'invalid' as unknown as TimelineItem[],
+    vendorItems: undefined,
+  });
+  assert.equal(plan.title, 'Launch Party');
+  assert.equal(plan.location, 'Main Hall');
+  assert.deepEqual(plan.keyHighlights, []);
+  assert.deepEqual(plan.budgetItems, []);
+  assert.deepEqual(plan.timelineItems, []);
+  assert.deepEqual(plan.vendorItems, []);
 });
