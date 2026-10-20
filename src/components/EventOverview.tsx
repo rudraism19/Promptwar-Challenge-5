@@ -11,6 +11,7 @@ import {
   Clock,
   Briefcase,
   Lightbulb,
+  Video,
 } from 'lucide-react';
 import type { EventPlan } from '../types.ts';
 import {
@@ -23,12 +24,14 @@ interface EventOverviewProps {
   event: EventPlan;
   onNavigateTab: (tabId: 'overview' | 'budget' | 'timeline' | 'vendors' | 'ideas') => void;
   onOpenCreateModal: () => void;
+  onOpenDemoModal?: () => void;
 }
 
 export const EventOverview: React.FC<EventOverviewProps> = ({
   event,
   onNavigateTab,
   onOpenCreateModal,
+  onOpenDemoModal,
 }) => {
   const [copiedHex, setCopiedHex] = useState<string | null>(null);
 
@@ -81,6 +84,15 @@ export const EventOverview: React.FC<EventOverviewProps> = ({
               <Users className="w-4 h-4 text-indigo-400" />
               <span>{event.guestCount} Guests</span>
             </div>
+            {onOpenDemoModal && (
+              <button
+                onClick={onOpenDemoModal}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-rose-500/90 to-amber-500/90 hover:from-rose-500 hover:to-amber-500 text-white font-semibold px-3.5 py-1.5 rounded-lg backdrop-blur-xs transition shadow-sm cursor-pointer ml-auto"
+              >
+                <Video className="w-4 h-4" />
+                <span>Watch Product Demo</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   Cake,
   Globe,
   PartyPopper,
+  Video,
 } from 'lucide-react';
 import type { EventPlan, EventType } from '../types.ts';
 import { calculateBudgetTotals, calculateTimelineProgress } from '../utils/eventCalculations.ts';
@@ -22,6 +23,7 @@ interface HeaderProps {
   onSelectEvent: (eventId: string) => void;
   onOpenCreateModal: () => void;
   onOpenExportModal: () => void;
+  onOpenDemoModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectEvent,
   onOpenCreateModal,
   onOpenExportModal,
+  onOpenDemoModal,
 }) => {
   const budgetTotals = calculateBudgetTotals(currentEvent.budgetItems, currentEvent.targetBudget);
   const timelineProgress = calculateTimelineProgress(currentEvent.timelineItems, new Date().toISOString());
@@ -122,6 +125,16 @@ export const Header: React.FC<HeaderProps> = ({
                 <ChevronDown className="w-3.5 h-3.5 text-stone-500 -ml-3 pointer-events-none" />
               </div>
             </div>
+
+            {/* Watch Demo Video button */}
+            <button
+              onClick={onOpenDemoModal}
+              aria-label="Watch Demo Video and Product Walkthrough"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-lg shadow-2xs transition"
+            >
+              <Video className="w-4 h-4 text-rose-600" />
+              <span className="hidden sm:inline">Demo Video</span>
+            </button>
 
             {/* Export Dossier button */}
             <button

@@ -17,6 +17,7 @@ import { VendorChecklist } from './components/VendorChecklist.tsx';
 import { AIIdeaLab } from './components/AIIdeaLab.tsx';
 import { CreateEventModal } from './components/CreateEventModal.tsx';
 import { ExportModal } from './components/ExportModal.tsx';
+import { DemoVideoModal } from './components/DemoVideoModal.tsx';
 
 const STORAGE_KEY_EVENTS = 'plancraft_events_v1';
 const STORAGE_KEY_ACTIVE_ID = 'plancraft_active_id_v1';
@@ -48,6 +49,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<'overview' | 'budget' | 'timeline' | 'vendors' | 'ideas'>('overview');
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
   const [exportModalOpen, setExportModalOpen] = useState<boolean>(false);
+  const [demoModalOpen, setDemoModalOpen] = useState<boolean>(false);
 
   // Sync to localStorage
   useEffect(() => {
@@ -132,6 +134,7 @@ export default function App() {
         onSelectEvent={(id) => setActiveEventId(id)}
         onOpenCreateModal={() => setCreateModalOpen(true)}
         onOpenExportModal={() => setExportModalOpen(true)}
+        onOpenDemoModal={() => setDemoModalOpen(true)}
       />
 
       {/* Main Tab Navigation Bar */}
@@ -166,6 +169,7 @@ export default function App() {
             event={currentEvent}
             onNavigateTab={(tab) => setCurrentTab(tab)}
             onOpenCreateModal={() => setCreateModalOpen(true)}
+            onOpenDemoModal={() => setDemoModalOpen(true)}
           />
         )}
 
@@ -223,6 +227,14 @@ export default function App() {
         <ExportModal
           event={currentEvent}
           onClose={() => setExportModalOpen(false)}
+        />
+      )}
+
+      {demoModalOpen && (
+        <DemoVideoModal
+          isOpen={demoModalOpen}
+          onClose={() => setDemoModalOpen(false)}
+          onNavigateToTab={(tab) => setCurrentTab(tab)}
         />
       )}
     </div>
