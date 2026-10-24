@@ -1,19 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Video,
-  Play,
-  Pause,
-  RotateCcw,
   Download,
   X,
   Sparkles,
-  CheckCircle2,
   DollarSign,
   Clock,
   Briefcase,
   Lightbulb,
   FileDown,
-  ExternalLink,
 } from 'lucide-react';
 
 interface DemoVideoModalProps {
@@ -28,8 +23,18 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
   onNavigateToTab,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [activeChapter, setActiveChapter] = useState<number>(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -38,63 +43,53 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
       time: 0,
       title: 'Event Master Overview & Palette',
       desc: 'AI-generated design concept, curated 5-swatch color palette with hex codes, and signature event highlights.',
-      icon: <Sparkles className="w-4 h-4 text-rose-500" />,
+      icon: <Sparkles className="w-4 h-4 text-rose-500" aria-hidden="true" />,
       tab: 'overview' as const,
     },
     {
       time: 6,
       title: 'Smart Budget & Category Allocations',
       desc: 'Planned vs actual costs, interactive visual allocation bars, over-budget alerts, and instant paid toggles.',
-      icon: <DollarSign className="w-4 h-4 text-emerald-500" />,
+      icon: <DollarSign className="w-4 h-4 text-emerald-500" aria-hidden="true" />,
       tab: 'budget' as const,
     },
     {
       time: 14,
       title: 'Master Timeline & Day-of Schedule',
       desc: '12+ month milestone countdown and minute-by-minute day-of run of show with sequence numbers and assignees.',
-      icon: <Clock className="w-4 h-4 text-indigo-500" />,
+      icon: <Clock className="w-4 h-4 text-indigo-500" aria-hidden="true" />,
       tab: 'timeline' as const,
     },
     {
       time: 20,
       title: 'Vendor Procurement & AI Vetting Guide',
       desc: 'Booked vendor directory with contracted rates, plus AI-generated interview questions and contract red flags.',
-      icon: <Briefcase className="w-4 h-4 text-purple-500" />,
+      icon: <Briefcase className="w-4 h-4 text-purple-500" aria-hidden="true" />,
       tab: 'vendors' as const,
     },
     {
       time: 27,
       title: 'Personalized AI Idea Lab',
       desc: 'Instant prompt brainstorming for bespoke signature cocktails, decor hacks, and 1-click plan inclusion.',
-      icon: <Lightbulb className="w-4 h-4 text-amber-500" />,
+      icon: <Lightbulb className="w-4 h-4 text-amber-500" aria-hidden="true" />,
       tab: 'ideas' as const,
     },
     {
       time: 33,
       title: 'Instant Dossier & CSV Export',
       desc: 'Print-ready run sheet for day-of coordinators and CSV export for spreadsheet management.',
-      icon: <FileDown className="w-4 h-4 text-stone-600" />,
+      icon: <FileDown className="w-4 h-4 text-stone-600" aria-hidden="true" />,
       tab: 'overview' as const,
     },
   ];
-
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-  };
 
   const jumpToChapter = (index: number) => {
     setActiveChapter(index);
     if (videoRef.current) {
       videoRef.current.currentTime = chapters[index].time;
-      videoRef.current.play();
-      setIsPlaying(true);
+      videoRef.current.play().catch(() => {
+        // Ignore autoplay restrictions in headless browsers
+      });
     }
   };
 
@@ -110,16 +105,21 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-6 backdrop-blur-xs overflow-y-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="demo-video-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-6 backdrop-blur-xs overflow-y-auto"
+    >
       <div className="bg-stone-900 border border-stone-800 text-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto animate-scaleUp flex flex-col my-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-800">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white shadow-sm">
-              <Video className="w-5 h-5" />
+              <Video className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold font-serif text-white flex items-center gap-2">
+              <h2 id="demo-video-modal-title" className="text-lg sm:text-xl font-bold font-serif text-white flex items-center gap-2">
                 PlanCraft AI Product Demo & Walkthrough
               </h2>
               <p className="text-xs text-stone-400">
@@ -128,6 +128,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="text-stone-400 hover:text-white p-1 rounded-lg hover:bg-stone-800 transition"
             aria-label="Close demo modal"
@@ -144,8 +145,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
             playsInline
             controls
             onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
+            aria-label="PlanCraft AI product walkthrough video"
             className="w-full h-full object-contain"
           >
             <source src="/demo-video.mp4" type="video/mp4" />
@@ -158,7 +158,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
         <div className="p-5 space-y-4 bg-stone-950/70 border-t border-stone-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               Demo Chapters & Guided Showcase
             </span>
             <div className="flex items-center gap-2">
@@ -167,7 +167,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
                 download="PlanCraft_AI_Demo_Video.mp4"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 px-3 py-1.5 rounded-lg shadow-2xs transition"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" aria-hidden="true" />
                 Download Video (.mp4)
               </a>
               <a
@@ -175,7 +175,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
                 download="PlanCraft_AI_Demo_Video.webm"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-300 hover:text-white bg-stone-800 hover:bg-stone-700 px-3 py-1.5 rounded-lg border border-stone-700 transition"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5" aria-hidden="true" />
                 Download (.webm)
               </a>
             </div>
@@ -185,7 +185,16 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
             {chapters.map((chap, idx) => (
               <div
                 key={idx}
+                role="button"
+                tabIndex={0}
                 onClick={() => jumpToChapter(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    jumpToChapter(idx);
+                  }
+                }}
+                aria-label={`Jump to chapter ${chap.title} at 0:${chap.time < 10 ? `0${chap.time}` : chap.time}`}
                 className={`p-3 rounded-xl border text-left cursor-pointer transition flex flex-col justify-between ${
                   activeChapter === idx
                     ? 'border-rose-500 bg-rose-950/40 text-white ring-1 ring-rose-500'
@@ -208,6 +217,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
                 </p>
                 {onNavigateToTab && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onNavigateToTab(chap.tab);
@@ -229,6 +239,7 @@ export const DemoVideoModal: React.FC<DemoVideoModalProps> = ({
             Recorded in real-time from PlanCraft AI operating with Gemini 3.8 Flash.
           </span>
           <button
+            type="button"
             onClick={onClose}
             className="ml-auto px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition"
           >

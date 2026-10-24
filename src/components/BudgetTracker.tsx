@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   Plus,
@@ -30,6 +30,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isEditingTarget, setIsEditingTarget] = useState<boolean>(false);
   const [tempTarget, setTempTarget] = useState<string>(event.targetBudget.toString());
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Modal for Add / Edit
   const [modalOpen, setModalOpen] = useState<boolean>(false);
@@ -50,6 +51,17 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
     notes: '',
   });
 
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modalOpen]);
+
   const totals = calculateBudgetTotals(event.budgetItems, event.targetBudget);
 
   const handleTogglePaid = (itemId: string) => {
@@ -59,7 +71,6 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
         return {
           ...item,
           paid: nextPaid,
-          // If marking paid and actualCost is 0, default actual to planned
           actualCost: nextPaid && item.actualCost === 0 ? item.plannedCost : item.actualCost,
         };
       }
@@ -68,11 +79,10 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
     onUpdateBudgetItems(updated);
   };
 
-  const handleDeleteItem = (itemId: string) => {
-    if (confirm('Are you sure you want to remove this budget line item?')) {
-      const updated = event.budgetItems.filter((item) => item.id !== itemId);
-      onUpdateBudgetItems(updated);
-    }
+  const handleConfirmDelete = (itemId: string) => {
+    const updated = event.budgetItems.filter((item) => item.id !== itemId);
+    onUpdateBudgetItems(updated);
+    setPendingDeleteId(null);
   };
 
   const handleOpenAdd = () => {
@@ -106,15 +116,14 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
     if (!formData.name.trim()) return;
 
     if (editingItem) {
-      // Edit
       const updated = event.budgetItems.map((it) =>
         it.id === editingItem.id
           ? {
               ...it,
               category: formData.category.trim(),
               name: formData.name.trim(),
-              plannedCost: Number(formData.plannedCost) || 0,
-              actualCost: Number(formData.actualCost) || 0,
+              plannedCost: Math.max(0, Number(formData.plannedCost) || 0),
+              actualCost: Math.max(0, Number(formData.actualCost) || 0),
               paid: formData.paid,
               notes: formData.notes.trim(),
             }
@@ -122,13 +131,12 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
       );
       onUpdateBudgetItems(updated);
     } else {
-      // Add
       const newItem: BudgetItem = {
         id: `budget-${Date.now()}`,
         category: formData.category.trim(),
         name: formData.name.trim(),
-        plannedCost: Number(formData.plannedCost) || 0,
-        actualCost: Number(formData.actualCost) || 0,
+        plannedCost: Math.max(0, Number(formData.plannedCost) || 0),
+        actualCost: Math.max(0, Number(formData.actualCost) || 0),
         paid: formData.paid,
         notes: formData.notes.trim(),
       };
@@ -167,17 +175,23 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
         <div className="bg-white p-5 rounded-xl border border-stone-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-stone-500 font-semibold uppercase tracking-wider mb-1">
             <span>Target Budget</span>
-            <DollarSign className="w-4 h-4 text-stone-400" />
+            <DollarSign className="w-4 h-4 text-stone-400" aria-hidden="true" />
           </div>
           {isEditingTarget ? (
             <div className="flex items-center gap-2 mt-2">
+              <label htmlFor="target-budget-input" className="sr-only">
+                Target Budget Amount
+              </label>
               <input
+                id="target-budget-input"
                 type="number"
+                min="0"
                 value={tempTarget}
                 onChange={(e) => setTempTarget(e.target.value)}
                 className="w-full text-lg font-bold border border-stone-300 rounded px-2 py-1 text-stone-900 focus:outline-rose-500"
               />
               <button
+                type="button"
                 onClick={handleSaveTarget}
                 className="p-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700"
                 aria-label="Save Target Budget"
@@ -185,6 +199,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                 <Check className="w-4 h-4" />
               </button>
               <button
+                type="button"
                 onClick={() => setIsEditingTarget(false)}
                 className="p-1.5 rounded bg-stone-200 text-stone-700 hover:bg-stone-300"
                 aria-label="Cancel editing"
@@ -198,6 +213,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                 ${totals.targetBudget.toLocaleString()}
               </span>
               <button
+                type="button"
                 onClick={() => {
                   setTempTarget(event.targetBudget.toString());
                   setIsEditingTarget(true);
@@ -218,7 +234,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
         <div className="bg-white p-5 rounded-xl border border-stone-200/90 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-stone-500 font-semibold uppercase tracking-wider mb-1">
             <span>Total Actual Spent</span>
-            <CheckCircle className="w-4 h-4 text-indigo-500" />
+            <CheckCircle className="w-4 h-4 text-indigo-500" aria-hidden="true" />
           </div>
           <div className="text-2xl font-extrabold text-stone-900 font-serif mt-1">
             ${totals.totalSpent.toLocaleString()}
@@ -241,6 +257,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
             <span>{totals.isOverBudget ? 'Over Budget By' : 'Remaining To Spend'}</span>
             <AlertCircle
               className={`w-4 h-4 ${totals.isOverBudget ? 'text-red-500' : 'text-emerald-600'}`}
+              aria-hidden="true"
             />
           </div>
           <div
@@ -253,7 +270,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
           <p className="text-xs mt-2 opacity-80">
             {totals.isOverBudget
               ? 'Action needed: trim category items or raise target'
-              : `${100 - totals.percentSpent}% of budget still available`}
+              : `${Math.max(0, 100 - totals.percentSpent)}% of budget still available`}
           </p>
         </div>
 
@@ -261,7 +278,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
         <div className="bg-gradient-to-br from-amber-50 to-rose-50 p-5 rounded-xl border border-amber-200 shadow-2xs flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900 uppercase tracking-wider mb-1">
-              <Sparkles className="w-4 h-4 text-amber-600" />
+              <Sparkles className="w-4 h-4 text-amber-600" aria-hidden="true" />
               <span>AI Budget Optimization</span>
             </div>
             <p className="text-xs text-amber-950 mt-1 leading-snug">
@@ -269,6 +286,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
             </p>
           </div>
           <button
+            type="button"
             onClick={onNavigateToIdeas}
             className="mt-3 w-full py-1.5 px-3 bg-white text-stone-800 hover:text-rose-600 text-xs font-bold rounded-lg border border-amber-300 shadow-2xs transition"
           >
@@ -299,7 +317,14 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                     </span>
                   </div>
                 </div>
-                <div className="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden flex">
+                <div
+                  role="progressbar"
+                  aria-label={`${cat.category} share of planned budget`}
+                  aria-valuenow={pct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden flex"
+                >
                   <div
                     className="bg-amber-600 h-2.5 transition-all duration-300"
                     style={{ width: `${pct}%` }}
@@ -318,7 +343,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {/* Category Selector Filter */}
             <div className="flex items-center gap-1.5 bg-stone-100 px-3 py-1.5 rounded-lg border border-stone-200 text-xs font-semibold text-stone-700">
-              <Tag className="w-3.5 h-3.5 text-stone-500" />
+              <Tag className="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
@@ -336,7 +361,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" aria-hidden="true" />
               <input
                 type="text"
                 value={searchQuery}
@@ -350,11 +375,12 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
           {/* Add Expense Button */}
           <button
+            type="button"
             onClick={handleOpenAdd}
             aria-label="Add Budget Line Item"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-2xs transition"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4" aria-hidden="true" />
             <span>Add Expense</span>
           </button>
         </div>
@@ -364,12 +390,12 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="text-[11px] font-bold uppercase tracking-wider text-stone-500 bg-stone-50 border-b border-stone-200">
               <tr>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Category</th>
-                <th className="py-3 px-3">Line Item & Notes</th>
-                <th className="py-3 px-3 text-right">Planned</th>
-                <th className="py-3 px-3 text-right">Actual</th>
-                <th className="py-3 px-3 text-right">Actions</th>
+                <th scope="col" className="py-3 px-3">Status</th>
+                <th scope="col" className="py-3 px-3">Category</th>
+                <th scope="col" className="py-3 px-3">Line Item & Notes</th>
+                <th scope="col" className="py-3 px-3 text-right">Planned</th>
+                <th scope="col" className="py-3 px-3 text-right">Actual</th>
+                <th scope="col" className="py-3 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
@@ -385,6 +411,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                     {/* Paid Toggle Checkbox */}
                     <td className="py-3 px-3 whitespace-nowrap">
                       <button
+                        type="button"
                         onClick={() => handleTogglePaid(item.id)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition ${
                           item.paid
@@ -394,7 +421,7 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                         title={item.paid ? 'Mark as Unpaid' : 'Mark as Paid'}
                         aria-label={`Toggle paid status for ${item.name}`}
                       >
-                        <CheckCircle className={`w-3.5 h-3.5 ${item.paid ? 'text-emerald-600' : 'text-stone-400'}`} />
+                        <CheckCircle className={`w-3.5 h-3.5 ${item.paid ? 'text-emerald-600' : 'text-stone-400'}`} aria-hidden="true" />
                         <span>{item.paid ? 'Paid' : 'Pending'}</span>
                       </button>
                     </td>
@@ -434,22 +461,45 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
                     {/* Actions */}
                     <td className="py-3 px-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-1.5 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded"
-                          aria-label={`Edit ${item.name}`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded"
-                          aria-label={`Delete ${item.name}`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {pendingDeleteId === item.id ? (
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDelete(item.id)}
+                            className="px-2 py-1 text-[11px] font-bold bg-red-600 text-white rounded hover:bg-red-700"
+                            aria-label={`Confirm delete ${item.name}`}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteId(null)}
+                            className="px-2 py-1 text-[11px] font-medium bg-stone-200 text-stone-700 rounded hover:bg-stone-300"
+                            aria-label="Cancel delete"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded"
+                            aria-label={`Edit ${item.name}`}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteId(item.id)}
+                            className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            aria-label={`Delete ${item.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -461,13 +511,19 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
       {/* Add / Edit Expense Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="budget-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-scaleUp">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="font-bold text-lg text-stone-900">
+              <h3 id="budget-modal-title" className="font-bold text-lg text-stone-900">
                 {editingItem ? 'Edit Expense Item' : 'Add New Expense Item'}
               </h3>
               <button
+                type="button"
                 onClick={() => setModalOpen(false)}
                 className="text-stone-400 hover:text-stone-600"
                 aria-label="Close modal"
@@ -478,10 +534,11 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
             <form onSubmit={handleSaveModal} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                <label htmlFor="budget-category-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Category
                 </label>
                 <input
+                  id="budget-category-input"
                   type="text"
                   required
                   value={formData.category}
@@ -492,10 +549,11 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                <label htmlFor="budget-name-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Item Description / Name
                 </label>
                 <input
+                  id="budget-name-input"
                   type="text"
                   required
                   value={formData.name}
@@ -507,10 +565,11 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="budget-planned-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Planned Cost ($)
                   </label>
                   <input
+                    id="budget-planned-input"
                     type="number"
                     min="0"
                     required
@@ -522,10 +581,11 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="budget-actual-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Actual Cost ($)
                   </label>
                   <input
+                    id="budget-actual-input"
                     type="number"
                     min="0"
                     value={formData.actualCost}
@@ -551,10 +611,11 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                <label htmlFor="budget-notes-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Contract / Memo Notes
                 </label>
                 <textarea
+                  id="budget-notes-input"
                   rows={2}
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}

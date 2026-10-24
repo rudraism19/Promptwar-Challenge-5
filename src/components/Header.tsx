@@ -15,7 +15,11 @@ import {
   Video,
 } from 'lucide-react';
 import type { EventPlan, EventType } from '../types.ts';
-import { calculateBudgetTotals, calculateTimelineProgress } from '../utils/eventCalculations.ts';
+import {
+  calculateBudgetTotals,
+  calculateTimelineProgress,
+  calculateDaysUntilEvent,
+} from '../utils/eventCalculations.ts';
 
 interface HeaderProps {
   events: EventPlan[];
@@ -36,19 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const budgetTotals = calculateBudgetTotals(currentEvent.budgetItems, currentEvent.targetBudget);
   const timelineProgress = calculateTimelineProgress(currentEvent.timelineItems, new Date().toISOString());
-
-  // Days until event calculation
-  const getDaysUntil = (dateStr: string) => {
-    const target = new Date(dateStr).getTime();
-    const today = new Date().getTime();
-    const diff = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
-    if (isNaN(diff)) return null;
-    if (diff < 0) return `${Math.abs(diff)} days ago`;
-    if (diff === 0) return 'Today!';
-    return `${diff} days away`;
-  };
-
-  const daysUntil = getDaysUntil(currentEvent.date);
+  const daysUntil = calculateDaysUntilEvent(currentEvent.date).label;
 
   const getEventBadge = (type: EventType) => {
     switch (type) {

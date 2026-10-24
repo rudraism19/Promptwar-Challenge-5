@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Briefcase,
   Plus,
@@ -14,7 +14,6 @@ import {
   Edit2,
   Trash2,
   X,
-  ExternalLink,
 } from 'lucide-react';
 import type { EventPlan, VendorItem, VendorStatus } from '../types.ts';
 import { calculateVendorProgress } from '../utils/eventCalculations.ts';
@@ -29,6 +28,7 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // AI Advice Modal state
   const [adviceVendor, setAdviceVendor] = useState<VendorItem | null>(null);
@@ -64,6 +64,17 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
     questionsToAsk: [],
   });
 
+  useEffect(() => {
+    if (!modalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modalOpen]);
+
   const progress = calculateVendorProgress(event.vendorItems);
 
   // Categories list
@@ -76,11 +87,10 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
     onUpdateVendorItems(updated);
   };
 
-  const handleDeleteVendor = (vendorId: string) => {
-    if (confirm('Are you sure you want to delete this vendor?')) {
-      const updated = event.vendorItems.filter((item) => item.id !== vendorId);
-      onUpdateVendorItems(updated);
-    }
+  const handleConfirmDelete = (vendorId: string) => {
+    const updated = event.vendorItems.filter((item) => item.id !== vendorId);
+    onUpdateVendorItems(updated);
+    setPendingDeleteId(null);
   };
 
   const handleOpenAdd = () => {
@@ -136,8 +146,8 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
               category: formData.category.trim(),
               name: formData.name.trim(),
               roleDescription: formData.roleDescription.trim(),
-              estimatedCost: Number(formData.estimatedCost) || 0,
-              actualCost: formData.actualCost !== undefined ? Number(formData.actualCost) : undefined,
+              estimatedCost: Math.max(0, Number(formData.estimatedCost) || 0),
+              actualCost: formData.actualCost !== undefined ? Math.max(0, Number(formData.actualCost)) : undefined,
               status: formData.status,
               contactName: formData.contactName.trim() || undefined,
               email: formData.email.trim() || undefined,
@@ -155,8 +165,8 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
         category: formData.category.trim(),
         name: formData.name.trim(),
         roleDescription: formData.roleDescription.trim(),
-        estimatedCost: Number(formData.estimatedCost) || 0,
-        actualCost: formData.actualCost !== undefined ? Number(formData.actualCost) : undefined,
+        estimatedCost: Math.max(0, Number(formData.estimatedCost) || 0),
+        actualCost: formData.actualCost !== undefined ? Math.max(0, Number(formData.actualCost)) : undefined,
         status: formData.status,
         contactName: formData.contactName.trim() || undefined,
         email: formData.email.trim() || undefined,
@@ -241,10 +251,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
             </p>
           </div>
           <button
+            type="button"
             onClick={handleOpenAdd}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-2xs transition"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4" aria-hidden="true" />
             <span>Add New Vendor</span>
           </button>
         </div>
@@ -283,12 +294,13 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative min-w-[200px]">
-            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search vendor or role..."
+              aria-label="Search vendors by name, category, or role"
               className="pl-8 pr-3 py-1.5 text-xs sm:text-sm bg-stone-50 border border-stone-200 rounded-lg text-stone-800 placeholder-stone-400 focus:outline-purple-500"
             />
           </div>
@@ -299,6 +311,7 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
+              aria-label="Filter vendors by booking status"
               className="bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Statuses ({event.vendorItems.length})</option>
@@ -315,6 +328,7 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
+              aria-label="Filter vendors by category"
               className="bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Categories</option>
@@ -332,9 +346,9 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredVendors.length === 0 ? (
           <div className="col-span-2 bg-white rounded-xl p-8 text-center text-stone-500 border border-stone-200">
-            <Briefcase className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+            <Briefcase className="w-8 h-8 text-stone-300 mx-auto mb-2" aria-hidden="true" />
             <p className="font-medium text-stone-700">No vendors found matching your criteria.</p>
-            <p className="text-xs text-stone-400 mt-1">Try clearing filters or click "Add New Vendor".</p>
+            <p className="text-xs text-stone-400 mt-1">Try clearing filters or click &ldquo;Add New Vendor&rdquo;.</p>
           </div>
         ) : (
           filteredVendors.map((vendor) => {
@@ -370,20 +384,45 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                       </div>
 
                       {/* Edit & Delete */}
-                      <button
-                        onClick={() => handleOpenEdit(vendor)}
-                        className="p-1 text-stone-400 hover:text-stone-700 rounded"
-                        aria-label={`Edit ${vendor.name}`}
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteVendor(vendor.id)}
-                        className="p-1 text-stone-400 hover:text-red-600 rounded"
-                        aria-label={`Delete ${vendor.name}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {pendingDeleteId === vendor.id ? (
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDelete(vendor.id)}
+                            className="px-2 py-0.5 text-[11px] font-bold bg-red-600 text-white rounded hover:bg-red-700"
+                            aria-label={`Confirm delete ${vendor.name}`}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteId(null)}
+                            className="px-2 py-0.5 text-[11px] font-medium bg-stone-200 text-stone-700 rounded hover:bg-stone-300"
+                            aria-label="Cancel delete vendor"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(vendor)}
+                            className="p-1 text-stone-400 hover:text-stone-700 rounded"
+                            aria-label={`Edit ${vendor.name}`}
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteId(vendor.id)}
+                            className="p-1 text-stone-400 hover:text-red-600 rounded"
+                            aria-label={`Delete ${vendor.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -421,19 +460,19 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                       <div className="flex flex-wrap items-center gap-3 text-stone-500 pt-0.5">
                         {vendor.email && (
                           <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3 text-stone-400" />
+                            <Mail className="w-3 h-3 text-stone-400" aria-hidden="true" />
                             {vendor.email}
                           </span>
                         )}
                         {vendor.phone && (
                           <span className="flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-stone-400" />
+                            <Phone className="w-3 h-3 text-stone-400" aria-hidden="true" />
                             {vendor.phone}
                           </span>
                         )}
                         {vendor.website && (
                           <span className="flex items-center gap-1 text-indigo-600 underline">
-                            <Globe className="w-3 h-3" />
+                            <Globe className="w-3 h-3" aria-hidden="true" />
                             {vendor.website}
                           </span>
                         )}
@@ -445,13 +484,13 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                   {vendor.questionsToAsk && vendor.questionsToAsk.length > 0 && (
                     <div className="mt-4 pt-3 border-t border-stone-100">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-stone-500 flex items-center gap-1 mb-1.5">
-                        <HelpCircle className="w-3 h-3 text-purple-600" />
+                        <HelpCircle className="w-3 h-3 text-purple-600" aria-hidden="true" />
                         <span>Key Questions to Ask</span>
                       </div>
                       <ul className="space-y-1 text-xs text-stone-700">
                         {vendor.questionsToAsk.map((q, i) => (
                           <li key={i} className="flex items-start gap-1.5">
-                            <span className="text-purple-500 font-bold">•</span>
+                            <span className="text-purple-500 font-bold" aria-hidden="true">•</span>
                             <span className="leading-snug">{q}</span>
                           </li>
                         ))}
@@ -463,10 +502,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                 {/* Card Footer: AI Vendor Guide Trigger */}
                 <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
                   <button
+                    type="button"
                     onClick={() => setAdviceVendor(vendor)}
                     className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold text-purple-700 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg transition"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Get AI Vetting Guide & Questions</span>
                   </button>
                 </div>
@@ -488,13 +528,19 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
       {/* Add / Edit Vendor Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="vendor-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-2xs"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 animate-scaleUp">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="font-bold text-lg text-stone-900">
+              <h3 id="vendor-modal-title" className="font-bold text-lg text-stone-900">
                 {editingItem ? 'Edit Vendor Details' : 'Add New Vendor'}
               </h3>
               <button
+                type="button"
                 onClick={() => setModalOpen(false)}
                 className="text-stone-400 hover:text-stone-600"
                 aria-label="Close modal"
@@ -505,10 +551,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
             <form onSubmit={handleSaveModal} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                <label htmlFor="vendor-name-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Vendor / Business Name
                 </label>
                 <input
+                  id="vendor-name-input"
                   type="text"
                   required
                   value={formData.name}
@@ -520,10 +567,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-category-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Category
                   </label>
                   <input
+                    id="vendor-category-input"
                     type="text"
                     required
                     value={formData.category}
@@ -534,10 +582,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-status-select" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Status
                   </label>
                   <select
+                    id="vendor-status-select"
                     value={formData.status}
                     onChange={(e) =>
                       setFormData({ ...formData, status: e.target.value as VendorStatus })
@@ -553,10 +602,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                <label htmlFor="vendor-role-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                   Role / Deliverables Description
                 </label>
                 <textarea
+                  id="vendor-role-input"
                   rows={2}
                   value={formData.roleDescription}
                   onChange={(e) => setFormData({ ...formData, roleDescription: e.target.value })}
@@ -567,10 +617,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-estimated-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Estimated Cost ($)
                   </label>
                   <input
+                    id="vendor-estimated-input"
                     type="number"
                     min="0"
                     required
@@ -583,10 +634,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-actual-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Contracted / Actual Cost ($)
                   </label>
                   <input
+                    id="vendor-actual-input"
                     type="number"
                     min="0"
                     value={formData.actualCost !== undefined ? formData.actualCost : ''}
@@ -604,10 +656,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-contact-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Contact Person
                   </label>
                   <input
+                    id="vendor-contact-input"
                     type="text"
                     value={formData.contactName}
                     onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
@@ -617,10 +670,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-email-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Email
                   </label>
                   <input
+                    id="vendor-email-input"
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -632,10 +686,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-phone-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Phone
                   </label>
                   <input
+                    id="vendor-phone-input"
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -645,10 +700,11 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 uppercase mb-1">
+                  <label htmlFor="vendor-website-input" className="block text-xs font-bold text-stone-700 uppercase mb-1">
                     Website
                   </label>
                   <input
+                    id="vendor-website-input"
                     type="text"
                     value={formData.website}
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}

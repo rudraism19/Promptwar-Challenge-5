@@ -12,6 +12,8 @@ import {
   Check,
   Loader2,
   Trash2,
+  DollarSign,
+  Clock,
 } from 'lucide-react';
 import type { EventPlan, IdeaCategory, PersonalizedIdea } from '../types.ts';
 import { brainstormIdeas } from '../services/api.ts';
@@ -20,13 +22,27 @@ interface AIIdeaLabProps {
   event: EventPlan;
   onUpdateIdeas: (ideas: PersonalizedIdea[]) => void;
   onAddIdeaToBudget?: (idea: PersonalizedIdea) => void;
+  onAddIdeaToTimeline?: (idea: PersonalizedIdea) => void;
 }
 
-export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) => {
+export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({
+  event,
+  onUpdateIdeas,
+  onAddIdeaToBudget,
+  onAddIdeaToTimeline,
+}) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [actionToast, setActionToast] = useState<{ id: string; text: string } | null>(null);
+
+  const showToast = (id: string, text: string) => {
+    setActionToast({ id, text });
+    setTimeout(() => {
+      setActionToast((prev) => (prev?.id === id ? null : prev));
+    }, 2400);
+  };
 
   // Preset chips depending on event type
   const getPromptChips = () => {
@@ -84,7 +100,6 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
       });
 
       if (newIdeas.length > 0) {
-        // Prepend new ideas with unique ids
         const formatted = newIdeas.map((idea, i) => ({
           ...idea,
           id: `ai-idea-${Date.now()}-${i}`,
@@ -95,8 +110,9 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
       } else {
         setErrorMsg('No ideas generated, please try a different prompt.');
       }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to brainstorm ideas.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to brainstorm ideas.';
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
@@ -114,41 +130,57 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
     onUpdateIdeas(updated);
   };
 
+  const handleSendToBudget = (idea: PersonalizedIdea) => {
+    onAddIdeaToBudget?.(idea);
+    if (!idea.addedToPlan) {
+      handleToggleAddPlan(idea.id);
+    }
+    showToast(idea.id, 'Added to Budget line items');
+  };
+
+  const handleSendToTimeline = (idea: PersonalizedIdea) => {
+    onAddIdeaToTimeline?.(idea);
+    if (!idea.addedToPlan) {
+      handleToggleAddPlan(idea.id);
+    }
+    showToast(idea.id, 'Added to Master Timeline');
+  };
+
   const getCategoryDetails = (cat: IdeaCategory | string) => {
     switch (cat) {
       case 'food_drink':
         return {
-          icon: <Utensils className="w-3.5 h-3.5" />,
+          icon: <Utensils className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Food & Beverage',
           bg: 'bg-amber-50 text-amber-800 border-amber-200',
         };
       case 'theme_decor':
         return {
-          icon: <Palette className="w-3.5 h-3.5" />,
+          icon: <Palette className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Theme & Decor',
           bg: 'bg-rose-50 text-rose-800 border-rose-200',
         };
       case 'entertainment_activity':
         return {
-          icon: <PartyPopper className="w-3.5 h-3.5" />,
+          icon: <PartyPopper className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Entertainment & Fun',
           bg: 'bg-purple-50 text-purple-800 border-purple-200',
         };
       case 'budget_saver':
         return {
-          icon: <PiggyBank className="w-3.5 h-3.5" />,
+          icon: <PiggyBank className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Cost Saver',
           bg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
         };
       case 'contingency_backup':
         return {
-          icon: <ShieldAlert className="w-3.5 h-3.5" />,
+          icon: <ShieldAlert className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Contingency & Plan B',
           bg: 'bg-blue-50 text-blue-800 border-blue-200',
         };
       default:
         return {
-          icon: <Lightbulb className="w-3.5 h-3.5" />,
+          icon: <Lightbulb className="w-3.5 h-3.5" aria-hidden="true" />,
           label: 'Creative Idea',
           bg: 'bg-stone-50 text-stone-800 border-stone-200',
         };
@@ -169,7 +201,7 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
         <div className="relative z-10 max-w-3xl space-y-4">
           <div className="flex items-center gap-2">
             <span className="p-2 rounded-xl bg-rose-500/30 text-rose-300 border border-rose-500/40">
-              <Sparkles className="w-5 h-5" />
+              <Sparkles className="w-5 h-5" aria-hidden="true" />
             </span>
             <span className="text-xs font-bold uppercase tracking-wider text-rose-300">
               GenAI Ideation Engine
@@ -182,7 +214,7 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
 
           <p className="text-sm sm:text-base text-stone-300 font-light leading-relaxed">
             Brainstorm bespoke signature details tailored specifically to{' '}
-            <strong className="text-white font-medium">"{event.title}"</strong> ({event.guestCount}{' '}
+            <strong className="text-white font-medium">&ldquo;{event.title}&rdquo;</strong> ({event.guestCount}{' '}
             guests, ${event.targetBudget.toLocaleString()} budget).
           </p>
 
@@ -193,11 +225,12 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
               {getPromptChips().map((chip, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={() => handleGenerate(chip)}
                   disabled={loading}
                   className="text-xs font-medium bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/15 px-3 py-1.5 rounded-lg text-stone-200 transition text-left disabled:opacity-50"
                 >
-                  "{chip}"
+                  &ldquo;{chip}&rdquo;
                 </button>
               ))}
             </div>
@@ -211,7 +244,11 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
             }}
             className="flex flex-col sm:flex-row gap-2 pt-2"
           >
+            <label htmlFor="ai-idea-prompt-input" className="sr-only">
+              Custom AI Brainstorming Prompt
+            </label>
             <input
+              id="ai-idea-prompt-input"
               type="text"
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
@@ -225,12 +262,12 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                   <span>Thinking...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4" />
+                  <Send className="w-4 h-4" aria-hidden="true" />
                   <span>Brainstorm</span>
                 </>
               )}
@@ -238,7 +275,7 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
           </form>
 
           {errorMsg && (
-            <p className="text-xs text-rose-300 bg-rose-900/40 p-2 rounded border border-rose-700/50">
+            <p role="alert" className="text-xs text-rose-300 bg-rose-900/40 p-2 rounded border border-rose-700/50">
               {errorMsg}
             </p>
           )}
@@ -261,7 +298,9 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
           ].map((cat) => (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setSelectedCategory(cat.id)}
+              aria-pressed={selectedCategory === cat.id}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
                 selectedCategory === cat.id
                   ? 'bg-rose-600 text-white shadow-2xs'
@@ -281,7 +320,7 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredIdeas.length === 0 ? (
           <div className="col-span-2 bg-white rounded-xl p-8 text-center text-stone-500 border border-stone-200">
-            <Lightbulb className="w-8 h-8 text-stone-300 mx-auto mb-2" />
+            <Lightbulb className="w-8 h-8 text-stone-300 mx-auto mb-2" aria-hidden="true" />
             <p className="font-medium text-stone-700">No ideas in this category yet.</p>
             <p className="text-xs text-stone-400 mt-1">
               Select one of the AI prompt chips above to generate ideas!
@@ -310,9 +349,10 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
                     </span>
 
                     <button
+                      type="button"
                       onClick={() => handleDeleteIdea(idea.id)}
-                      className="text-stone-300 hover:text-red-500 p-1"
-                      aria-label="Delete this idea"
+                      className="text-stone-400 hover:text-red-600 p-1 rounded"
+                      aria-label={`Delete idea ${idea.title}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -339,17 +379,28 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
                   {/* Estimated Cost impact */}
                   {idea.estimatedCostImpact && (
                     <div className="mt-2 text-xs font-semibold text-stone-600 flex items-center gap-1.5">
-                      <span className="text-stone-400">Estimated Cost Impact:</span>
+                      <span className="text-stone-500">Estimated Cost Impact:</span>
                       <span className="text-stone-900 bg-stone-100 px-2 py-0.5 rounded">
                         {idea.estimatedCostImpact}
                       </span>
                     </div>
                   )}
+
+                  {actionToast?.id === idea.id && (
+                    <div
+                      role="status"
+                      className="mt-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                      <span>{actionToast.text}</span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Card Action: Toggle Added to Plan */}
-                <div className="pt-3 border-t border-stone-100 flex items-center justify-between">
+                {/* Card Actions: Toggle Plan + Push to Budget / Timeline */}
+                <div className="pt-3 border-t border-stone-100 space-y-2">
                   <button
+                    type="button"
                     onClick={() => handleToggleAddPlan(idea.id)}
                     className={`w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs sm:text-sm font-semibold rounded-lg transition ${
                       idea.addedToPlan
@@ -359,16 +410,43 @@ export const AIIdeaLab: React.FC<AIIdeaLabProps> = ({ event, onUpdateIdeas }) =>
                   >
                     {idea.addedToPlan ? (
                       <>
-                        <Check className="w-4 h-4 text-emerald-700" />
+                        <Check className="w-4 h-4 text-emerald-700" aria-hidden="true" />
                         <span>Included in Event Master Plan</span>
                       </>
                     ) : (
                       <>
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-4 h-4" aria-hidden="true" />
                         <span>Add to My Event Plan</span>
                       </>
                     )}
                   </button>
+
+                  {(onAddIdeaToBudget || onAddIdeaToTimeline) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {onAddIdeaToBudget && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendToBudget(idea)}
+                          className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
+                          aria-label={`Add "${idea.title}" to Budget expenses`}
+                        >
+                          <DollarSign className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                          <span>+ Add to Budget</span>
+                        </button>
+                      )}
+                      {onAddIdeaToTimeline && (
+                        <button
+                          type="button"
+                          onClick={() => handleSendToTimeline(idea)}
+                          className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-semibold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition"
+                          aria-label={`Add "${idea.title}" to Master Timeline`}
+                        >
+                          <Clock className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+                          <span>+ Add to Timeline</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );

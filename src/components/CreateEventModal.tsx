@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Heart,
@@ -10,7 +10,6 @@ import {
   Users,
   DollarSign,
   MapPin,
-  Loader2,
   Check,
 } from 'lucide-react';
 import type { EventCreationPrompt, EventPlan, EventType } from '../types.ts';
@@ -45,6 +44,17 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const [loadingStep, setLoadingStep] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen || loading) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, loading, onClose]);
+
   if (!isOpen) return null;
 
   const eventTypes: { type: EventType; title: string; desc: string; icon: React.ReactNode }[] = [
@@ -52,25 +62,25 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
       type: 'wedding',
       title: 'Wedding',
       desc: 'Romance, timelines, tastings, seating, florists, & ceremony',
-      icon: <Heart className="w-5 h-5 text-rose-500" />,
+      icon: <Heart className="w-5 h-5 text-rose-500" aria-hidden="true" />,
     },
     {
       type: 'birthday',
       title: 'Birthday Celebration',
       desc: 'Milestones, theme parties, cake, DJ, arcades & games',
-      icon: <Cake className="w-5 h-5 text-purple-500" />,
+      icon: <Cake className="w-5 h-5 text-purple-500" aria-hidden="true" />,
     },
     {
       type: 'community',
       title: 'Community Festival',
       desc: 'Neighborhood fairs, block parties, park permits, & volunteers',
-      icon: <Globe className="w-5 h-5 text-emerald-500" />,
+      icon: <Globe className="w-5 h-5 text-emerald-500" aria-hidden="true" />,
     },
     {
       type: 'corporate',
       title: 'Corporate / Gala',
       desc: 'Company retreats, fundraisers, award ceremonies, & banquets',
-      icon: <PartyPopper className="w-5 h-5 text-blue-500" />,
+      icon: <PartyPopper className="w-5 h-5 text-blue-500" aria-hidden="true" />,
     },
   ];
 
@@ -127,7 +137,6 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
     setLoading(true);
     setErrorMsg(null);
 
-    // Show progressive status messages
     setLoadingStep('Crafting aesthetic concept & color palette...');
     const stepTimer1 = setTimeout(() => {
       setLoadingStep('Balancing budget allocations & category line items...');
@@ -155,9 +164,10 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
       const plan = sanitizeEventPlan(rawPlan);
       onEventCreated(plan);
       onClose();
-    } catch (err: any) {
-      console.error('Error generating event plan:', err);
-      setErrorMsg(err.message || 'Failed to generate event plan. Please try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to generate event plan. Please try again.';
+      console.error('Error generating event plan:', message);
+      setErrorMsg(message);
     } finally {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
@@ -167,16 +177,21 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-event-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto"
+    >
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 sm:p-8 animate-scaleUp my-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-stone-200">
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-500 text-white shadow-sm">
-              <Sparkles className="w-5 h-5" />
+              <Sparkles className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold font-serif text-stone-900">
+              <h2 id="create-event-modal-title" className="text-xl sm:text-2xl font-bold font-serif text-stone-900">
                 Plan New Event with PlanCraft AI
               </h2>
               <p className="text-xs sm:text-sm text-stone-500">
@@ -185,6 +200,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={loading}
             className="text-stone-400 hover:text-stone-600 p-1"
@@ -195,9 +211,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         </div>
 
         {loading ? (
-          <div className="py-16 text-center space-y-4">
+          <div className="py-16 text-center space-y-4" role="status">
             <div className="w-16 h-16 rounded-full bg-rose-50 border-2 border-rose-200 flex items-center justify-center mx-auto text-rose-600 animate-pulse">
-              <Sparkles className="w-8 h-8" />
+              <Sparkles className="w-8 h-8" aria-hidden="true" />
             </div>
             <h3 className="text-lg font-bold text-stone-900 font-serif">
               Generating Master Event Plan...
@@ -212,15 +228,16 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             {/* Step 1: Select Event Type */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
+            <fieldset>
+              <legend className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
                 1. Select Event Type
-              </label>
+              </legend>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {eventTypes.map((t) => (
                   <button
                     key={t.type}
                     type="button"
+                    aria-pressed={eventType === t.type}
                     onClick={() => handleSelectEventType(t.type)}
                     className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
                       eventType === t.type
@@ -231,7 +248,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                     <div className="flex items-center justify-between mb-2">
                       {t.icon}
                       {eventType === t.type && (
-                        <Check className="w-4 h-4 text-rose-600 font-bold" />
+                        <Check className="w-4 h-4 text-rose-600 font-bold" aria-hidden="true" />
                       )}
                     </div>
                     <div>
@@ -241,17 +258,20 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             {/* Step 2: Name & Logistics */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
+              <div className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
                 2. Event Details & Scale
-              </label>
+              </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-stone-600 mb-1">Event Title / Name</label>
+                  <label htmlFor="create-event-title" className="block text-xs text-stone-600 mb-1">
+                    Event Title / Name
+                  </label>
                   <input
+                    id="create-event-title"
                     type="text"
                     required
                     value={title}
@@ -263,10 +283,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-stone-400" /> Event Date
+                    <label htmlFor="create-event-date" className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" /> Event Date
                     </label>
                     <input
+                      id="create-event-date"
                       type="date"
                       required
                       value={date}
@@ -276,10 +297,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-stone-400" /> Location / Venue
+                    <label htmlFor="create-event-location" className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" /> Location / Venue
                     </label>
                     <input
+                      id="create-event-location"
                       type="text"
                       required
                       value={location}
@@ -292,10 +314,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5 text-stone-400" /> Expected Guest Count
+                    <label htmlFor="create-event-guests" className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" /> Expected Guest Count
                     </label>
                     <input
+                      id="create-event-guests"
                       type="number"
                       min="1"
                       required
@@ -306,10 +329,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
-                      <DollarSign className="w-3.5 h-3.5 text-stone-400" /> Target Total Budget ($)
+                    <label htmlFor="create-event-budget" className="block text-xs text-stone-600 mb-1 flex items-center gap-1">
+                      <DollarSign className="w-3.5 h-3.5 text-stone-400" aria-hidden="true" /> Target Total Budget ($)
                     </label>
                     <input
+                      id="create-event-budget"
                       type="number"
                       min="100"
                       required
@@ -324,7 +348,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
             {/* Step 3: Vibe & Style */}
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
+              <label htmlFor="create-event-vibe" className="block text-xs font-bold uppercase tracking-wider text-stone-700 mb-2">
                 3. Vibe, Theme & Aesthetic Concept
               </label>
 
@@ -343,7 +367,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                           : 'border-stone-200 text-stone-700 hover:bg-stone-50'
                       }`}
                     >
-                      "{preset}"
+                      &ldquo;{preset}&rdquo;
                     </button>
                   ))}
                 </div>
@@ -351,6 +375,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
               <div>
                 <textarea
+                  id="create-event-vibe"
                   rows={2}
                   required
                   value={vibe}
@@ -361,10 +386,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
               </div>
 
               <div className="mt-3">
-                <label className="block text-xs text-stone-600 mb-1">
+                <label htmlFor="create-event-requests" className="block text-xs text-stone-600 mb-1">
                   Special Requirements, Must-Haves, or Dietary Constraints (Optional)
                 </label>
                 <textarea
+                  id="create-event-requests"
                   rows={2}
                   value={specialRequests}
                   onChange={(e) => setSpecialRequests(e.target.value)}
@@ -375,7 +401,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
             </div>
 
             {errorMsg && (
-              <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+              <p role="alert" className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
                 {errorMsg}
               </p>
             )}
@@ -393,7 +419,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                 type="submit"
                 className="inline-flex items-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-rose-600 via-amber-600 to-rose-600 hover:opacity-95 rounded-lg shadow-md transition cursor-pointer"
               >
-                <Sparkles className="w-4 h-4" />
+                <Sparkles className="w-4 h-4" aria-hidden="true" />
                 <span>Generate Master Plan with AI</span>
               </button>
             </div>

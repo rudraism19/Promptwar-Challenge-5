@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Sparkles,
   LayoutDashboard,
@@ -9,6 +9,10 @@ import {
 } from 'lucide-react';
 import type { BudgetItem, EventPlan, PersonalizedIdea, TimelineItem, VendorItem } from './types.ts';
 import { SEED_EVENTS } from './data/seedEvents.ts';
+import {
+  convertIdeaToBudgetItem,
+  convertIdeaToTimelineItem,
+} from './utils/exportFormatters.ts';
 import { Header } from './components/Header.tsx';
 import { EventOverview } from './components/EventOverview.tsx';
 import { BudgetTracker } from './components/BudgetTracker.tsx';
@@ -42,7 +46,9 @@ export default function App() {
     try {
       const savedId = localStorage.getItem(STORAGE_KEY_ACTIVE_ID);
       if (savedId) return savedId;
-    } catch {}
+    } catch {
+      // Ignore storage access errors in restricted environments
+    }
     return SEED_EVENTS[0].id;
   });
 
@@ -63,7 +69,9 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ACTIVE_ID, activeEventId);
-    } catch {}
+    } catch {
+      // Ignore storage access errors
+    }
   }, [activeEventId]);
 
   // Find active event
@@ -80,6 +88,15 @@ export default function App() {
         return e;
       })
     );
+  };
+
+  const handleUpdateEventDetails = (
+    updates: Partial<Pick<EventPlan, 'title' | 'date' | 'location' | 'guestCount' | 'customNotes'>>
+  ) => {
+    updateCurrentEvent((prev) => ({
+      ...prev,
+      ...updates,
+    }));
   };
 
   const handleUpdateBudgetItems = (items: BudgetItem[], newTargetBudget?: number) => {
@@ -111,6 +128,28 @@ export default function App() {
     }));
   };
 
+  const handleAddIdeaToBudget = (idea: PersonalizedIdea) => {
+    const newBudgetItem = convertIdeaToBudgetItem(idea);
+    updateCurrentEvent((prev) => ({
+      ...prev,
+      budgetItems: [newBudgetItem, ...prev.budgetItems],
+      personalizedIdeas: prev.personalizedIdeas.map((it) =>
+        it.id === idea.id ? { ...it, addedToPlan: true } : it
+      ),
+    }));
+  };
+
+  const handleAddIdeaToTimeline = (idea: PersonalizedIdea) => {
+    const newTimelineItem = convertIdeaToTimelineItem(idea);
+    updateCurrentEvent((prev) => ({
+      ...prev,
+      timelineItems: [newTimelineItem, ...prev.timelineItems],
+      personalizedIdeas: prev.personalizedIdeas.map((it) =>
+        it.id === idea.id ? { ...it, addedToPlan: true } : it
+      ),
+    }));
+  };
+
   const handleEventCreated = (newPlan: EventPlan) => {
     setEvents((prev) => [newPlan, ...prev]);
     setActiveEventId(newPlan.id);
@@ -118,15 +157,23 @@ export default function App() {
   };
 
   const navTabs = [
-    { id: 'overview', label: 'Event Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'budget', label: 'Budget & Expenses', icon: <DollarSign className="w-4 h-4" /> },
-    { id: 'timeline', label: 'Timeline & Run-of-Show', icon: <Clock className="w-4 h-4" /> },
-    { id: 'vendors', label: 'Vendors & Checklist', icon: <Briefcase className="w-4 h-4" /> },
-    { id: 'ideas', label: 'AI Idea Lab', icon: <Lightbulb className="w-4 h-4" /> },
+    { id: 'overview', label: 'Event Overview', icon: <LayoutDashboard className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'budget', label: 'Budget & Expenses', icon: <DollarSign className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'timeline', label: 'Timeline & Run-of-Show', icon: <Clock className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'vendors', label: 'Vendors & Checklist', icon: <Briefcase className="w-4 h-4" aria-hidden="true" /> },
+    { id: 'ideas', label: 'AI Idea Lab', icon: <Lightbulb className="w-4 h-4" aria-hidden="true" /> },
   ] as const;
 
   return (
     <div className="min-h-screen bg-stone-100/70 font-sans text-stone-900 flex flex-col">
+      {/* Skip to Main Content Link for Keyboard Accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-rose-600 focus:text-white focus:font-bold focus:rounded-lg focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
+
       {/* Top Header */}
       <Header
         events={events}
@@ -146,6 +193,8 @@ export default function App() {
               return (
                 <button
                   key={tab.id}
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => setCurrentTab(tab.id)}
                   className={`inline-flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg whitespace-nowrap transition cursor-pointer ${
                     isActive
@@ -163,13 +212,14 @@ export default function App() {
       </div>
 
       {/* Main Body Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main id="main-content" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {currentTab === 'overview' && (
           <EventOverview
             event={currentEvent}
             onNavigateTab={(tab) => setCurrentTab(tab)}
             onOpenCreateModal={() => setCreateModalOpen(true)}
             onOpenDemoModal={() => setDemoModalOpen(true)}
+            onUpdateEventDetails={handleUpdateEventDetails}
           />
         )}
 
@@ -199,6 +249,8 @@ export default function App() {
           <AIIdeaLab
             event={currentEvent}
             onUpdateIdeas={handleUpdateIdeas}
+            onAddIdeaToBudget={handleAddIdeaToBudget}
+            onAddIdeaToTimeline={handleAddIdeaToTimeline}
           />
         )}
       </main>
@@ -207,7 +259,7 @@ export default function App() {
       <footer className="bg-white border-t border-stone-200 py-6 text-center text-xs text-stone-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 font-medium text-stone-700">
-            <Sparkles className="w-4 h-4 text-rose-500" />
+            <Sparkles className="w-4 h-4 text-rose-500" aria-hidden="true" />
             <span>PlanCraft AI — Intelligent Wedding, Birthday & Community Event Producer</span>
           </div>
           <div>

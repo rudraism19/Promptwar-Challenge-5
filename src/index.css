@@ -11,6 +11,11 @@
   h1, h2, h3, .font-serif {
     font-family: 'Playfair Display', Georgia, serif;
   }
+
+  :focus-visible {
+    outline: 2px solid #e11d48;
+    outline-offset: 2px;
+  }
 }
 
 @keyframes fadeIn {
@@ -41,6 +46,17 @@
 
 .animate-scaleUp {
   animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @media print {
