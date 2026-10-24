@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { BudgetItem, EventPlan, PersonalizedIdea, TimelineItem, VendorItem } from './types.ts';
 import { SEED_EVENTS } from './data/seedEvents.ts';
+import { sanitizeEventPlan } from './utils/eventCalculations.ts';
 import {
   convertIdeaToBudgetItem,
   convertIdeaToTimelineItem,
@@ -33,7 +34,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((ev) => sanitizeEventPlan(ev));
         }
       }
     } catch (e) {

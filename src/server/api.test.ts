@@ -39,6 +39,25 @@ describe('Express API Integration Tests', () => {
     assert.equal(body.service, 'plancraft-ai');
   });
 
+  it('POST endpoints return 400 Bad Request on malformed JSON or array payloads without exposing stack traces', async () => {
+    const malformedRes = await fetch(`${baseUrl}/api/ai/generate-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"eventType": "wedding", broken_json',
+    });
+    assert.equal(malformedRes.status, 400);
+    const malformedBody = (await malformedRes.json()) as { success: boolean; error: string };
+    assert.equal(malformedBody.success, false);
+    assert.match(malformedBody.error, /Malformed JSON/i);
+
+    const arrayBodyRes = await fetch(`${baseUrl}/api/ai/generate-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(['not', 'an', 'object']),
+    });
+    assert.equal(arrayBodyRes.status, 400);
+  });
+
   it('POST /api/ai/generate-event generates a complete event plan for wedding, birthday, and community events', async () => {
     const res = await fetch(`${baseUrl}/api/ai/generate-event`, {
       method: 'POST',

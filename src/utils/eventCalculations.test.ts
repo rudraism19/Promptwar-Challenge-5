@@ -1,12 +1,16 @@
-import test from 'node:test';
+import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateBudgetTotals,
+  calculateDaysUntilEvent,
   calculateTimelineProgress,
   calculateVendorProgress,
+  filterBudgetItems,
   filterTimelineItems,
+  filterVendorItems,
   sanitizeEventPlan,
 } from './eventCalculations.ts';
+import { SEED_EVENTS } from '../data/seedEvents.ts';
 import type { BudgetItem, TimelineItem, VendorItem } from '../types.ts';
 
 test('calculateBudgetTotals computes planned, spent, and categories accurately', () => {
@@ -72,10 +76,23 @@ test('calculateTimelineProgress calculates completion percentage and overdue cou
 
 test('calculateTimelineProgress handles empty lists, invalid dates and completed overdue items', () => {
   assert.deepEqual(calculateTimelineProgress([], '2026-01-01'), {
-    total: 0, completed: 0, pending: 0, percent: 0, overdueCount: 0, phaseCounts: {},
+    total: 0,
+    completed: 0,
+    pending: 0,
+    percent: 0,
+    overdueCount: 0,
+    phaseCounts: {},
   });
   const items: TimelineItem[] = [
-    { id: 'a', title: 'Invalid date', description: '', phase: '', dueDate: 'not-a-date', completed: false, priority: 'low' },
+    {
+      id: 'a',
+      title: 'Invalid date',
+      description: '',
+      phase: '' as unknown as TimelineItem['phase'],
+      dueDate: 'not-a-date',
+      completed: false,
+      priority: 'low',
+    },
     { id: 'b', title: 'Done', description: '', phase: 'Final Weeks', dueDate: '2020-01-01', completed: true, priority: 'low' },
   ];
   const result = calculateTimelineProgress(items, '2026-01-01');
@@ -111,54 +128,109 @@ test('calculateVendorProgress handles empty vendors and uses estimated booked co
   assert.equal(result.totalCommittedCost, 2500);
 });
 
-test('filterTimelineItems correctly filters by phase and search query', () => {
+test('filterTimelineItems correctly filters by phase, priority, assignee, and search query', () => {
   const items: TimelineItem[] = [
-    { id: '1', title: 'Find DJ', description: 'Search local DJs', phase: '6-9 Months', completed: false, priority: 'medium' },
-    { id: '2', title: 'Finalize Seating', description: 'Table chart', phase: 'Final Weeks', completed: true, priority: 'high' },
+    { id: '1', title: 'Find DJ', description: 'Search local DJs', phase: '6-9 Months', completed: false, priority: 'medium', assignedTo: 'Alex' },
+    { id: '2', title: 'Finalize Seating', description: 'Table chart', phase: 'Final Weeks', completed: true, priority: 'high', assignedTo: 'Jordan' },
     { id: '3', title: 'Rehearsal Dinner', description: 'Reserve venue table', phase: 'Final Weeks', completed: false, priority: 'high' },
   ];
   assert.equal(filterTimelineItems(items, { phase: 'Final Weeks' }).length, 2);
   const searchFiltered = filterTimelineItems(items, { searchQuery: 'chart' });
   assert.equal(searchFiltered.length, 1);
   assert.equal(searchFiltered[0].id, '2');
+  assert.equal(filterTimelineItems(items, { searchQuery: 'jordan' }).length, 1);
   assert.equal(filterTimelineItems(items, { phase: 'Final Weeks', hideCompleted: true }).length, 1);
+  assert.equal(filterTimelineItems(items, { priority: 'medium' }).length, 1);
 });
 
-test('filterTimelineItems supports priority, case-insensitive search and ALL filters', () => {
-  const items: TimelineItem[] = [
-    { id: '1', title: 'Book DJ', description: 'Call venue', phase: 'Final Weeks', completed: false, priority: 'high' },
-    { id: '2', title: 'Order Cake', description: 'Chocolate cake', phase: 'Day-of Schedule', completed: false, priority: 'low' },
-  ];
-  assert.equal(filterTimelineItems(items, { priority: 'high' }).length, 1);
-  assert.equal(filterTimelineItems(items, { phase: 'ALL', priority: 'ALL', searchQuery: 'CHOCOLATE' }).length, 1);
-});
-
-test('sanitizeEventPlan returns valid EventPlan defaults on missing fields', () => {
-  const plan = sanitizeEventPlan({ title: 'Spring Garden Party', eventType: 'birthday' });
-  assert.equal(plan.title, 'Spring Garden Party');
-  assert.equal(plan.eventType, 'birthday');
-  assert.ok(plan.targetBudget > 0);
-  assert.ok(plan.guestCount > 0);
-  assert.ok(Array.isArray(plan.colorPalette));
-  assert.ok(plan.colorPalette.length > 0);
-  assert.ok(Array.isArray(plan.budgetItems));
-  assert.ok(Array.isArray(plan.timelineItems));
-  assert.ok(Array.isArray(plan.vendorItems));
-});
-
-test('sanitizeEventPlan trims text and tolerates malformed collections', () => {
-  const plan = sanitizeEventPlan({
-    title: '  Launch Party  ',
-    location: '  Main Hall  ',
-    keyHighlights: null as unknown as string[],
-    budgetItems: null as unknown as BudgetItem[],
-    timelineItems: 'invalid' as unknown as TimelineItem[],
-    vendorItems: undefined,
+describe('Additional filtering, countdown, and seed integrity checks', () => {
+  it('filterBudgetItems filters by category and case-insensitive search across name, category, and notes', () => {
+    const items: BudgetItem[] = [
+      { id: 'b1', category: 'Venue', name: 'Conservatory Hall', plannedCost: 5000, actualCost: 5000, paid: true, notes: 'Includes chairs' },
+      { id: 'b2', category: 'Catering', name: 'Harvest Dinner', plannedCost: 4000, actualCost: 0, paid: false, notes: 'Vegan options included' },
+    ];
+    assert.equal(filterBudgetItems(items, { category: 'ALL' }).length, 2);
+    assert.equal(filterBudgetItems(items, { category: 'Venue' }).length, 1);
+    assert.equal(filterBudgetItems(items, { searchQuery: 'vegan' }).length, 1);
+    assert.equal(filterBudgetItems(items, { searchQuery: 'nonexistent' }).length, 0);
   });
-  assert.equal(plan.title, 'Launch Party');
-  assert.equal(plan.location, 'Main Hall');
-  assert.deepEqual(plan.keyHighlights, []);
-  assert.deepEqual(plan.budgetItems, []);
-  assert.deepEqual(plan.timelineItems, []);
-  assert.deepEqual(plan.vendorItems, []);
+
+  it('filterVendorItems filters by status, category, and search query', () => {
+    const vendors: VendorItem[] = [
+      { id: 'v1', category: 'Photography', name: 'Golden Hour Co', roleDescription: 'Candid portraits', estimatedCost: 2200, status: 'booked', questionsToAsk: [] },
+      { id: 'v2', category: 'Entertainment', name: 'Vinyl Groove DJ', roleDescription: 'Reception dance floor', estimatedCost: 1200, status: 'researching', questionsToAsk: [] },
+    ];
+    assert.equal(filterVendorItems(vendors, { status: 'booked' }).length, 1);
+    assert.equal(filterVendorItems(vendors, { category: 'Entertainment' }).length, 1);
+    assert.equal(filterVendorItems(vendors, { searchQuery: 'candid' }).length, 1);
+    assert.equal(filterVendorItems(vendors, { status: 'declined' }).length, 0);
+  });
+
+  it('calculateDaysUntilEvent calculates positive countdowns, clamps past dates to 0, and returns null on invalid dates', () => {
+    assert.deepEqual(calculateDaysUntilEvent('2026-10-15', '2026-10-05'), {
+      days: 10,
+      label: '10 days away',
+    });
+    assert.deepEqual(calculateDaysUntilEvent('2026-10-06', '2026-10-05'), {
+      days: 1,
+      label: '1 day away',
+    });
+    assert.deepEqual(calculateDaysUntilEvent('2026-10-05', '2026-10-05'), {
+      days: 0,
+      label: 'Today!',
+    });
+    assert.deepEqual(calculateDaysUntilEvent('2026-01-01', '2026-06-01'), {
+      days: 0,
+      label: 'Past event',
+    });
+    assert.deepEqual(calculateDaysUntilEvent('', '2026-06-01'), {
+      days: null,
+      label: '',
+    });
+    assert.deepEqual(calculateDaysUntilEvent('invalid-date', '2026-06-01'), {
+      days: null,
+      label: '',
+    });
+  });
+
+  it('sanitizeEventPlan validates hex colors, trims strings, and handles null/malformed collections', () => {
+    const fromNull = sanitizeEventPlan(null);
+    assert.equal(fromNull.title, 'Untitled Event');
+    assert.ok(fromNull.colorPalette.length >= 4);
+
+    const plan = sanitizeEventPlan({
+      title: '  Launch Party  ',
+      location: '  Main Hall  ',
+      colorPalette: [{ name: 'Bad Hex', hex: 'javascript:alert(1)' }],
+      keyHighlights: null as unknown as string[],
+      budgetItems: [
+        { id: '', category: '  ', name: '  ', plannedCost: -200, actualCost: 300, paid: true },
+      ],
+      timelineItems: 'invalid' as unknown as TimelineItem[],
+      vendorItems: undefined,
+    });
+    assert.equal(plan.title, 'Launch Party');
+    assert.equal(plan.location, 'Main Hall');
+    assert.match(plan.colorPalette[0].hex, /^#[0-9a-fA-F]{3,8}$/);
+    assert.equal(plan.budgetItems[0].category, 'General');
+    assert.equal(plan.budgetItems[0].plannedCost, 0);
+    assert.equal(plan.budgetItems[0].actualCost, 300);
+    assert.deepEqual(plan.keyHighlights, []);
+    assert.deepEqual(plan.timelineItems, []);
+    assert.deepEqual(plan.vendorItems, []);
+  });
+
+  it('SEED_EVENTS contain valid wedding, birthday, and community events with complete financial and timeline data', () => {
+    assert.equal(SEED_EVENTS.length, 3);
+    const types = SEED_EVENTS.map((e) => e.eventType);
+    assert.deepEqual(types, ['wedding', 'birthday', 'community']);
+
+    for (const event of SEED_EVENTS) {
+      const totals = calculateBudgetTotals(event.budgetItems, event.targetBudget);
+      assert.ok(totals.totalPlanned > 0);
+      assert.ok(event.timelineItems.length >= 5);
+      assert.ok(event.vendorItems.length >= 2);
+      assert.ok(event.personalizedIdeas.length >= 2);
+    }
+  });
 });

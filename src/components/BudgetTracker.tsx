@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import type { BudgetItem, EventPlan } from '../types.ts';
-import { calculateBudgetTotals } from '../utils/eventCalculations.ts';
+import { calculateBudgetTotals, filterBudgetItems } from '../utils/eventCalculations.ts';
 
 interface BudgetTrackerProps {
   event: EventPlan;
@@ -153,18 +153,9 @@ export const BudgetTracker: React.FC<BudgetTrackerProps> = ({
   };
 
   // Filtered items
-  const filteredItems = event.budgetItems.filter((item) => {
-    if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = item.name.toLowerCase().includes(q);
-      const matchNotes = item.notes?.toLowerCase().includes(q);
-      const matchCat = item.category.toLowerCase().includes(q);
-      if (!matchName && !matchNotes && !matchCat) return false;
-    }
-    return true;
+  const filteredItems = filterBudgetItems(event.budgetItems, {
+    category: selectedCategory,
+    searchQuery,
   });
 
   return (

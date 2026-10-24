@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { EventPlan, VendorItem, VendorStatus } from '../types.ts';
-import { calculateVendorProgress } from '../utils/eventCalculations.ts';
+import { calculateVendorProgress, filterVendorItems } from '../utils/eventCalculations.ts';
 import { VendorAdviceModal } from './VendorAdviceModal.tsx';
 
 interface VendorChecklistProps {
@@ -195,17 +195,10 @@ export const VendorChecklist: React.FC<VendorChecklistProps> = ({ event, onUpdat
   };
 
   // Filtered vendors
-  const filteredVendors = event.vendorItems.filter((v) => {
-    if (selectedStatus !== 'ALL' && v.status !== selectedStatus) return false;
-    if (selectedCategory !== 'ALL' && v.category !== selectedCategory) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchName = v.name.toLowerCase().includes(q);
-      const matchCat = v.category.toLowerCase().includes(q);
-      const matchRole = v.roleDescription.toLowerCase().includes(q);
-      if (!matchName && !matchCat && !matchRole) return false;
-    }
-    return true;
+  const filteredVendors = filterVendorItems(event.vendorItems, {
+    status: selectedStatus,
+    category: selectedCategory,
+    searchQuery,
   });
 
   const getStatusBadge = (status: VendorStatus) => {

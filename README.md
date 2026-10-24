@@ -20,9 +20,9 @@ PlanCraft AI is a GenAI-powered event planning workspace for weddings, birthdays
 - Vite 8 for the frontend build and development tooling
 - Express for the application server and AI API routes
 - Google GenAI SDK (`@google/genai`) for Gemini-powered planning, ideation, and vendor guidance
-- Tailwind CSS 4 and `@tailwindcss/vite)
+- Tailwind CSS 4 and `@tailwindcss/vite`
 - Lucide React icons
-- Node.js and dotenv for runtime configuration
+- Node.js (`node:test` for unit & API integration tests) and dotenv for runtime configuration
 
 ## How the AI works
 
@@ -30,6 +30,7 @@ The frontend calls server-side endpoints; the Gemini API key is not intended to 
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /api/health` | Returns service health status, security headers, and whether live AI is configured. |
 | `POST /api/ai/generate-event` | Builds a complete event plan with theme, budget line items, timeline, vendor recommendations, and personalized ideas. |
 | `POST /api/ai/brainstorm-ideas` | Generates ideas based on the event type, style, guest count, budget, and prompt. |
 | `POST /api/ai/vendor-advice` | Produces vendor-vetting questions, potential red flags, and negotiation guidance. |
@@ -116,6 +117,7 @@ npm start
 ├── src/
 │   ├── App.tsx               # Main dashboard, tabs, and event state
 │   ├── components/
+│   │   ├── Header.tsx
 │   │   ├── EventOverview.tsx
 │   │   ├── BudgetTracker.tsx
 │   │   ├── TimelineView.tsx
@@ -123,11 +125,13 @@ npm start
 │   │   ├── AIIdeaLab.tsx
 │   │   ├── CreateEventModal.tsx
 │   │   ├── VendorAdviceModal.tsx
-│   │   └── ExportModal.tsx
-│   ├── data/                 # Seed event examples
-│   ├── services/api.ts       # Frontend calls to the server API
+│   │   ├── ExportModal.tsx
+│   │   └── DemoVideoModal.tsx
+│   ├── data/                 # Seed event examples (Wedding, Birthday, Community)
+│   ├── server/api.test.ts    # Express API & security header integration tests
+│   ├── services/             # Frontend API client & unit tests (api.ts, api.test.ts)
 │   ├── types.ts              # Shared TypeScript types
-│   └── utils/                # Budget calculations and tests
+│   └── utils/                # Pure calculations, formatters, validators & unit tests
 ├── public/                   # Public assets and demo video
 └── .env.example              # Environment variable template
 ```

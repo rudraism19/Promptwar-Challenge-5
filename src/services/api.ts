@@ -1,5 +1,14 @@
 import type { EventCreationPrompt, EventPlan, PersonalizedIdea } from '../types.ts';
 
+async function extractErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string; message?: string };
+    return body.error || body.message || `${fallback} (HTTP ${response.status})`;
+  } catch {
+    return `${fallback} (HTTP ${response.status})`;
+  }
+}
+
 export async function generateAIEventPlan(params: EventCreationPrompt): Promise<EventPlan> {
   const response = await fetch('/api/ai/generate-event', {
     method: 'POST',
@@ -10,12 +19,17 @@ export async function generateAIEventPlan(params: EventCreationPrompt): Promise<
   });
 
   if (!response.ok) {
-    throw new Error(`Server returned error ${response.status}`);
+    throw new Error(await extractErrorMessage(response, 'Server returned error'));
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    success?: boolean;
+    plan?: EventPlan;
+    error?: string;
+    message?: string;
+  };
   if (!data.success || !data.plan) {
-    throw new Error(data.message || 'Failed to generate event plan');
+    throw new Error(data.error || data.message || 'Failed to generate event plan');
   }
 
   return data.plan;
@@ -39,11 +53,11 @@ export async function brainstormIdeas(params: {
   });
 
   if (!response.ok) {
-    throw new Error(`Server error: ${response.status}`);
+    throw new Error(await extractErrorMessage(response, 'Failed to brainstorm ideas'));
   }
 
-  const data = await response.json();
-  return data.ideas || [];
+  const data = (await response.json()) as { ideas?: PersonalizedIdea[] };
+  return Array.isArray(data.ideas) ? data.ideas : [];
 }
 
 export async function getVendorAdvice(params: {
@@ -65,10 +79,16 @@ export async function getVendorAdvice(params: {
   });
 
   if (!response.ok) {
-    throw new Error(`Server error: ${response.status}`);
+    throw new Error(await extractErrorMessage(response, 'Failed to fetch vendor advice'));
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as {
+    advice?: {
+      questions: string[];
+      redFlags?: string[];
+      negotiationTip?: string;
+    };
+  };
   return (
     data.advice || {
       questions: ['What does your package include?', 'What are cancellation terms?'],

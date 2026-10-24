@@ -1,4 +1,4 @@
-import type { BudgetItem, EventPlan, TimelineItem, VendorItem } from '../types.ts';
+import type { BudgetItem, ColorSwatch, EventPlan, TimelineItem, VendorItem } from '../types.ts';
 
 export interface CategorySummary {
   category: string;
@@ -51,17 +51,20 @@ export function calculateBudgetTotals(
     categoryMap.set(catName, existing);
   }
 
-  const categories: CategorySummary[] = Array.from(categoryMap.entries()).map(([cat, val]) => ({
-    category: cat,
-    planned: Math.round(val.planned),
-    actual: Math.round(val.actual),
-    count: val.count,
-    percentOfBudget: safeTarget > 0 ? Math.round((val.planned / safeTarget) * 100) : 0,
-  })).sort((a, b) => b.planned - a.planned);
+  const categories: CategorySummary[] = Array.from(categoryMap.entries())
+    .map(([cat, val]) => ({
+      category: cat,
+      planned: Math.round(val.planned),
+      actual: Math.round(val.actual),
+      count: val.count,
+      percentOfBudget: safeTarget > 0 ? Math.round((val.planned / safeTarget) * 100) : 0,
+    }))
+    .sort((a, b) => b.planned - a.planned);
 
   const remainingTarget = safeTarget - totalSpent;
   const isOverBudget = safeTarget > 0 && totalSpent > safeTarget;
-  const percentSpent = safeTarget > 0 ? Math.min(100, Math.round((totalSpent / safeTarget) * 100)) : 0;
+  const percentSpent =
+    safeTarget > 0 ? Math.min(100, Math.round((totalSpent / safeTarget) * 100)) : 0;
 
   return {
     targetBudget: safeTarget,
@@ -101,7 +104,9 @@ export function calculateTimelineProgress(
       completed++;
     } else if (item.dueDate) {
       const dueTime = new Date(item.dueDate).getTime();
-      if (!isNaN(dueTime) && dueTime < refTime) overdueCount++;
+      if (!Number.isNaN(dueTime) && !Number.isNaN(refTime) && dueTime < refTime) {
+        overdueCount++;
+      }
     }
 
     const phase = item.phase || 'Unscheduled';
@@ -146,7 +151,15 @@ export function calculateVendorProgress(vendorItems: VendorItem[] = []): VendorP
   }
 
   const percentBooked = total > 0 ? Math.round((booked / total) * 100) : 0;
-  return { total, booked, contacted, researching, declined, percentBooked, totalCommittedCost: Math.round(totalCommittedCost) };
+  return {
+    total,
+    booked,
+    contacted,
+    researching,
+    declined,
+    percentBooked,
+    totalCommittedCost: Math.round(totalCommittedCost),
+  };
 }
 
 export function filterTimelineItems(
@@ -166,39 +179,159 @@ export function filterTimelineItems(
       const q = filter.searchQuery.toLowerCase().trim();
       const matchTitle = item.title.toLowerCase().includes(q);
       const matchDesc = item.description?.toLowerCase().includes(q);
-      if (!matchTitle && !matchDesc) return false;
+      const matchAssigned = item.assignedTo?.toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc && !matchAssigned) return false;
     }
     return true;
   });
 }
 
-export function sanitizeEventPlan(raw: Partial<EventPlan>): EventPlan {
+export function filterBudgetItems(
+  items: BudgetItem[] = [],
+  filter: {
+    category?: string;
+    searchQuery?: string;
+  }
+): BudgetItem[] {
+  return items.filter((item) => {
+    if (filter.category && filter.category !== 'ALL' && item.category !== filter.category) {
+      return false;
+    }
+    if (filter.searchQuery && filter.searchQuery.trim()) {
+      const q = filter.searchQuery.toLowerCase().trim();
+      const matchName = item.name.toLowerCase().includes(q);
+      const matchNotes = item.notes?.toLowerCase().includes(q);
+      const matchCat = item.category.toLowerCase().includes(q);
+      if (!matchName && !matchNotes && !matchCat) return false;
+    }
+    return true;
+  });
+}
+
+export function filterVendorItems(
+  items: VendorItem[] = [],
+  filter: {
+    status?: string;
+    category?: string;
+    searchQuery?: string;
+  }
+): VendorItem[] {
+  return items.filter((vendor) => {
+    if (filter.status && filter.status !== 'ALL' && vendor.status !== filter.status) {
+      return false;
+    }
+    if (filter.category && filter.category !== 'ALL' && vendor.category !== filter.category) {
+      return false;
+    }
+    if (filter.searchQuery && filter.searchQuery.trim()) {
+      const q = filter.searchQuery.toLowerCase().trim();
+      const matchName = vendor.name.toLowerCase().includes(q);
+      const matchCat = vendor.category.toLowerCase().includes(q);
+      const matchRole = vendor.roleDescription.toLowerCase().includes(q);
+      if (!matchName && !matchCat && !matchRole) return false;
+    }
+    return true;
+  });
+}
+
+export interface DaysUntilEventResult {
+  days: number | null;
+  label: string;
+}
+
+export function calculateDaysUntilEvent(
+  eventDateStr: string,
+  referenceDateStr?: string
+): DaysUntilEventResult {
+  if (!eventDateStr) return { days: null, label: '' };
+  const target = new Date(eventDateStr).getTime();
+  const now = referenceDateStr ? new Date(referenceDateStr).getTime() : Date.now();
+  if (Number.isNaN(target) || Number.isNaN(now)) return { days: null, label: '' };
+  const diffDays = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return { days: 0, label: 'Past event' };
+  if (diffDays === 0) return { days: 0, label: 'Today!' };
+  if (diffDays === 1) return { days: 1, label: '1 day away' };
+  return { days: diffDays, label: `${diffDays} days away` };
+}
+
+const DEFAULT_COLOR_PALETTE: ColorSwatch[] = [
+  { name: 'Sage Green', hex: '#607d67' },
+  { name: 'Warm Cream', hex: '#faf7f2' },
+  { name: 'Dusty Rose', hex: '#d9989b' },
+  { name: 'Champagne Gold', hex: '#d4af37' },
+];
+
+const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{3,8}$/;
+
+export function sanitizeEventPlan(rawInput: Partial<EventPlan> | null | undefined): EventPlan {
+  const raw: Partial<EventPlan> =
+    rawInput && typeof rawInput === 'object' ? rawInput : {};
   const now = new Date().toISOString();
+
+  const validPalette: ColorSwatch[] = Array.isArray(raw.colorPalette)
+    ? raw.colorPalette
+        .filter((sw): sw is ColorSwatch => Boolean(sw && typeof sw === 'object'))
+        .map((sw, idx) => ({
+          name:
+            typeof sw.name === 'string' && sw.name.trim()
+              ? sw.name.trim()
+              : `Accent ${idx + 1}`,
+          hex:
+            typeof sw.hex === 'string' && HEX_COLOR_REGEX.test(sw.hex.trim())
+              ? sw.hex.trim()
+              : DEFAULT_COLOR_PALETTE[idx % DEFAULT_COLOR_PALETTE.length].hex,
+        }))
+    : [];
+
+  const sanitizedBudget: BudgetItem[] = Array.isArray(raw.budgetItems)
+    ? raw.budgetItems
+        .filter((b): b is BudgetItem => Boolean(b && typeof b === 'object'))
+        .map((b, idx) => ({
+          id: typeof b.id === 'string' && b.id.trim() ? b.id : `b-${idx + 1}`,
+          category:
+            typeof b.category === 'string' && b.category.trim()
+              ? b.category.trim()
+              : 'General',
+          name:
+            typeof b.name === 'string' && b.name.trim()
+              ? b.name.trim()
+              : `Expense Item ${idx + 1}`,
+          plannedCost: Math.round(finiteNonNegative(b.plannedCost)),
+          actualCost: Math.round(finiteNonNegative(b.actualCost)),
+          paid: Boolean(b.paid),
+          notes: typeof b.notes === 'string' ? b.notes : undefined,
+        }))
+    : [];
+
   return {
-    id: raw.id || `event-${Date.now()}`,
-    title: raw.title?.trim() || 'Untitled Event',
+    id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `event-${Date.now()}`,
+    title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : 'Untitled Event',
     eventType: raw.eventType || 'other',
-    date: raw.date || '2026-12-31',
+    date: typeof raw.date === 'string' && raw.date.trim() ? raw.date.trim() : '2026-12-31',
     targetBudget: Math.max(0, Number(raw.targetBudget) || 5000),
     guestCount: Math.max(1, Number(raw.guestCount) || 50),
-    location: raw.location?.trim() || 'To be determined',
-    vibeAndTheme: raw.vibeAndTheme?.trim() || 'Warm, memorable & festive celebration',
-    colorPalette: Array.isArray(raw.colorPalette) && raw.colorPalette.length > 0
-      ? raw.colorPalette
-      : [
-          { name: 'Sage Green', hex: '#607d67' },
-          { name: 'Warm Cream', hex: '#faf7f2' },
-          { name: 'Dusty Rose', hex: '#d9989b' },
-          { name: 'Champagne Gold', hex: '#d4af37' },
-        ],
-    summaryStory: raw.summaryStory?.trim() || 'A thoughtfully planned event curated for unforgettable memories.',
-    keyHighlights: Array.isArray(raw.keyHighlights) ? raw.keyHighlights : [],
-    budgetItems: Array.isArray(raw.budgetItems) ? raw.budgetItems : [],
+    location:
+      typeof raw.location === 'string' && raw.location.trim()
+        ? raw.location.trim()
+        : 'To be determined',
+    vibeAndTheme:
+      typeof raw.vibeAndTheme === 'string' && raw.vibeAndTheme.trim()
+        ? raw.vibeAndTheme.trim()
+        : 'Warm, memorable & festive celebration',
+    colorPalette: validPalette.length > 0 ? validPalette : DEFAULT_COLOR_PALETTE,
+    summaryStory:
+      typeof raw.summaryStory === 'string' && raw.summaryStory.trim()
+        ? raw.summaryStory.trim()
+        : 'A thoughtfully planned event curated for unforgettable memories.',
+    keyHighlights: Array.isArray(raw.keyHighlights)
+      ? raw.keyHighlights.filter((h): h is string => typeof h === 'string' && h.trim().length > 0)
+      : [],
+    budgetItems: sanitizedBudget,
     timelineItems: Array.isArray(raw.timelineItems) ? raw.timelineItems : [],
     vendorItems: Array.isArray(raw.vendorItems) ? raw.vendorItems : [],
     personalizedIdeas: Array.isArray(raw.personalizedIdeas) ? raw.personalizedIdeas : [],
-    customNotes: raw.customNotes || '',
-    createdAt: raw.createdAt || now,
+    customNotes: typeof raw.customNotes === 'string' ? raw.customNotes : '',
+    createdAt: typeof raw.createdAt === 'string' && raw.createdAt ? raw.createdAt : now,
     updatedAt: now,
   };
 }
